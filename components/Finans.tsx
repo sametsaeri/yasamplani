@@ -58,8 +58,6 @@ export default function Finans({ db, setDb }: Props) {
   const [defterPB, setDefterPB] = useState("₺");
   const [defterMenu, setDefterMenu] = useState(false);
   const [gizlileriGoster, setGizlileriGoster] = useState(false);
-  const [silOnayId, setSilOnayId] = useState<string | null>(null);
-  const [silYazi, setSilYazi] = useState("");
 
   const [hesapModal, setHesapModal] = useState(false);
   const [duzHesap, setDuzHesap] = useState<string | null>(null);
@@ -134,32 +132,7 @@ export default function Finans({ db, setDb }: Props) {
     setDefterForm(false);
   };
 
-  /** Base44 gibi: kritik silmede defter adını yazarak onay (modal). */
-  const defterSil = (id: string) => {
-    if (db.ledgers.length <= 1) return alert("Son defter silinemez.");
-    if (!db.ledgers.some((x) => x.id === id)) return;
-    setSilYazi("");
-    setSilOnayId(id);
-  };
-
-  const defterSilOnayla = () => {
-    const id = silOnayId;
-    if (!id) return;
-    const d = db.ledgers.find((x) => x.id === id);
-    if (!d) return;
-    if (silYazi.trim().toLocaleLowerCase("tr") !== d.name.toLocaleLowerCase("tr"))
-      return alert("Ad eşleşmedi → silme iptal edildi. Verilerine dokunulmadı.");
-    setSilOnayId(null);
-    setDb((d0) => ({
-      ...d0,
-      ledgers: d0.ledgers.filter((z) => z.id !== id),
-      accounts: d0.accounts.filter((a) => a.ledger_id !== id),
-      transactions: d0.transactions.filter((t) => t.ledger_id !== id),
-      budgets: d0.budgets.filter((b) => b.ledger_id !== id),
-      aktif: d0.aktif === id ? d0.ledgers.filter((z) => z.id !== id)[0].id : d0.aktif
-    }));
-    setInceleId(null);
-  };
+  // Not: Defter silme mantığı ve onay penceresi artık Ayarlar (Rapor) bölümünde.
 
   /** Base44: defteri panelden gizle (veri durur, listeden kaybolur). */
   const defterGizle = (id: string) => {
@@ -198,14 +171,6 @@ export default function Finans({ db, setDb }: Props) {
         : x))
     }));
     setDefterMenu(false);
-  };
-
-  const tumDefterSil = () => {
-    if (!confirm("TÜM defterler, hesaplar, işlemler ve bütçeler silinsin mi? Görev/günlük/notlar korunur.")) return;
-    if (!confirm("Son onay: geri alınamaz. Silinsin mi?")) return;
-    const nl = { id: uid(), name: "Kişisel", color: "#3b82f6" };
-    setDb((d) => ({ ...d, ledgers: [nl], aktif: nl.id, accounts: [], transactions: [], budgets: [] }));
-    setInceleId(null);
   };
 
   const hesapAc = (onHesapId?: string) => {
@@ -584,7 +549,7 @@ export default function Finans({ db, setDb }: Props) {
           </div>
         )}
 
-        {/* Base44: 3 nokta menü — Düzenle / CSV / Gizle / Sil */}
+        {/* Düzenle / CSV / Gizle — SİL burada yok, silme Ayarlar (Rapor) bölümünde */}
         <div className="relative mt-2 flex flex-wrap items-center gap-2 text-xs">
           <button
             onClick={() => setDefterMenu(!defterMenu)}
@@ -596,26 +561,25 @@ export default function Finans({ db, setDb }: Props) {
           <button onClick={() => setGizlileriGoster(!gizlileriGoster)} className="text-slate-500 hover:underline">
             {gizlileriGoster ? "🙈 Gizlileri gizle" : `Gizli defterler (${db.ledgers.filter((d) => d.gizli).length})`}
           </button>
-          <button onClick={tumDefterSil} className="text-red-600 hover:underline">
-            🗑 Tüm defterleri sil (yeniden başla)
-          </button>
 
           {defterMenu && (
             <div className="absolute left-0 top-9 z-20 w-60 rounded-xl border border-slate-200 bg-white p-1.5 text-[13px] shadow-lg">
               {[
                 { e: "✏️ Düzenle (ad / açıklama / para birimi / renk)", f: () => defterDuzenle(aktifDefter) },
                 { e: "📄 Rapor Al (CSV)", f: () => defterCsv(aktifDefter) },
-                { e: "🙈 Panelden gizle", f: () => defterGizle(aktifDefter.id) },
-                { e: "🗑 Sil (adını yazarak onay)", f: () => defterSil(aktifDefter.id), tehlike: true }
+                { e: "🙈 Panelden gizle", f: () => defterGizle(aktifDefter.id) }
               ].map((o) => (
                 <button
                   key={o.e}
                   onClick={() => { setDefterMenu(false); o.f(); }}
-                  className={`block w-full rounded-lg px-2.5 py-2 text-left hover:bg-slate-50 ${o.tehlike ? "text-red-600" : "text-slate-700"}`}
+                  className="block w-full rounded-lg px-2.5 py-2 text-left text-slate-700 hover:bg-slate-50"
                 >
                   {o.e}
                 </button>
               ))}
+              <div className="mt-1 border-t border-slate-100 px-2.5 py-2 text-[11px] text-slate-400">
+                Defter silmek için Ayarlar → 🗂 Defter Yönetimi
+              </div>
             </div>
           )}
         </div>
@@ -1050,45 +1014,7 @@ export default function Finans({ db, setDb }: Props) {
       </Modal>
 
       {/* Hesap detayı artık yukarıda tam sayfa olarak dönüyor (modal değil) */}
-
-      {/* Base44: defter silme — adını yazarak onay */}
-      <Modal
-        acik={!!silOnayId}
-        kapat={() => { setSilOnayId(null); setSilYazi(""); }}
-        baslik="⚠️ Defteri kalıcı olarak sil"
-      >
-        {silOnayId && (() => {
-          const d = db.ledgers.find((x) => x.id === silOnayId)!;
-          const hSay = db.accounts.filter((a) => a.ledger_id === silOnayId).length;
-          const tSay = db.transactions.filter((t) => t.ledger_id === silOnayId).length;
-          const eslesme = silYazi.trim().toLocaleLowerCase("tr") === d.name.toLocaleLowerCase("tr");
-          return (
-            <div className="space-y-3 text-[13px]">
-              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-800">
-                <b>“{d.name}”</b> defteri ve içindeki <b>{hSay} hesap</b>, <b>{tSay} işlem</b> ile
-                tüm bütçeleri silinecek. <b>Bu işlem geri alınamaz.</b>
-              </div>
-              <Alan etiket={`Onaylamak için defterin adını yaz: ${d.name}`}>
-                <input
-                  className={inp}
-                  value={silYazi}
-                  autoFocus
-                  placeholder={d.name}
-                  onChange={(e) => setSilYazi(e.target.value)}
-                  data-testid="sil-onay"
-                />
-              </Alan>
-              <div className="flex justify-end gap-2">
-                <Btn ghost onClick={() => { setSilOnayId(null); setSilYazi(""); }}>Vazgeç</Btn>
-                <Btn tehlike disabled={!eslesme} onClick={defterSilOnayla} title={eslesme ? "Sil" : "Önce defterin adını yaz"}>
-                  {eslesme ? "Sil" : "Adı eşleşmiyor"}
-                </Btn>
-              </div>
-              {!eslesme && <p className="text-right text-xs text-slate-400">Sil butonu, ad tam olarak yazılınca açılır.</p>}
-            </div>
-          );
-        })()}
-      </Modal>
+      {/* Defter silme onayı artık Ayarlar → 🗂 Defter Yönetimi bölümünde */}
     </div>
   );
 }

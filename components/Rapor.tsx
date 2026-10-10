@@ -52,6 +52,26 @@ type FisKayit = {
 
 export function RaporView({ db, setDb, replaceAll, anahtar, oturum }: Props & { anahtar: string }) {
   const aktifDefter = db.ledgers.find((d) => d.id === db.aktif);
+  // Defter silme artık YALNIZCA bu bölümde (kullanıcı isteği)
+  const [silDefterId, setSilDefterId] = useState<string | null>(null);
+  const [silYazi, setSilYazi] = useState("");
+  const silOnayla = () => {
+    if (!silDefterId) return;
+    const d = db.ledgers.find((x) => x.id === silDefterId);
+    if (!d || silYazi.trim().toLocaleLowerCase("tr") !== d.name.toLocaleLowerCase("tr")) return;
+    const kalan = db.ledgers.filter((x) => x.id !== silDefterId);
+    setDb((prev) => ({
+      ...prev,
+      ledgers: kalan,
+      aktif: prev.aktif === silDefterId ? kalan[0]?.id ?? "" : prev.aktif,
+      accounts: prev.accounts.filter((a) => a.ledger_id !== silDefterId),
+      transactions: prev.transactions.filter((t) => t.ledger_id !== silDefterId),
+      budgets: prev.budgets.filter((b) => b.ledger_id !== silDefterId),
+      sablonlar: prev.sablonlar.filter((s) => s.ledger_id !== silDefterId)
+    }));
+    setSilDefterId(null);
+    setSilYazi("");
+  };
   const [izin, setIzin] = useState<string>(() =>
     typeof window !== "undefined" && "Notification" in window ? Notification.permission : "desteklenmiyor"
   );
@@ -244,6 +264,90 @@ export function RaporView({ db, setDb, replaceAll, anahtar, oturum }: Props & { 
           <Btn ghost onClick={() => window.print()}><Printer size={15} className="mr-1 inline" /> Yazdır / PDF</Btn>
         </div>
         <p className="mt-2 text-xs text-slate-400">CSV, Excel ile açılır. PDF için Yazdır'da hedef olarak “PDF olarak kaydet”i seç.</p>
+      </Card>
+
+      <Card>
+        <Baslik>🗂 Defter Yönetimi <span className="text-xs font-normal text-slate-400">• silme yalnızca burada</span></Baslik>
+        <p className="mb-3 text-xs text-slate-500">
+          Defter silmek <b>yalnızca bu bölümden</b> yapılır — Finans ekranındaki “⋯ Defter işlemleri”
+          menüsünde silme yoktur. Yanlışlıkla silmeye karşı defter adını yazman gerekir.
+        </p>
+        <div className="space-y-2">
+          {db.ledgers.map((d) => {
+            const hSay = db.accounts.filter((a) => a.ledger_id === d.id).length;
+            const tSay = db.transactions.filter((t) => t.ledger_id === d.id).length;
+            return (
+              <div key={d.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: d.color }} />
+                <b className="min-w-0 flex-1 truncate text-sm">{d.name}</b>
+                {d.id === db.aktif && (
+                  <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-medium text-white">Aktif</span>
+                )}
+                <span className="text-[11px] text-slate-500">{hSay} hesap · {tSay} işlem</span>
+                <Btn
+                  kucuk
+                  tehlike
+                  disabled={db.ledgers.length <= 1}
+                  title={db.ledgers.length <= 1 ? "Son defter silinemez" : "Bu defteri sil"}
+                  onClick={() => { setSilYazi(""); setSilDefterId(d.id); }}
+                >
+                  🗑 Sil
+                </Btn>
+              </div>
+            );
+          })}
+        </div>
+
+        {db.ledgers.length <= 1 && (
+          <p className="mt-2 text-xs text-slate-400">Son defter silinemez.</p>
+        )}
+
+        <div className="mt-4 border-t border-slate-100 pt-3">
+          <Btn
+            tehlike
+            onClick={() => {
+              if (!confirm("TÜM defterler, hesaplar, işlemler ve bütçeler silinsin mi? Görev/günlük/notlar korunur. Bu işlem geri alınamaz.")) return;
+              const bos = { ...db, ledgers: [], aktif: "", accounts: [], transactions: [], budgets: [], sablonlar: [] };
+              replaceAll(bos);
+            }}
+          >
+            🗑 Tüm defterleri sil (yeniden başla)
+          </Btn>
+          <p className="mt-1.5 text-xs text-slate-400">
+            Görevler, planlar, günlük, notlar, hedefler ve ayarlar <b>korunur</b>; yalnızca finans kayıtları silinir.
+          </p>
+        </div>
+
+        {/* Silme onayı: ad yazılınca düğme açılır */}
+        {silDefterId && (() => {
+          const d = db.ledgers.find((x) => x.id === silDefterId)!;
+          const hSay = db.accounts.filter((a) => a.ledger_id === d.id).length;
+          const tSay = db.transactions.filter((t) => t.ledger_id === d.id).length;
+          const eslesme = silYazi.trim().toLocaleLowerCase("tr") === d.name.toLocaleLowerCase("tr");
+          return (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3">
+              <div className="mb-3 text-[13px] text-red-800">
+                <b>“{d.name}”</b> defteri ve içindeki <b>{hSay} hesap</b>, <b>{tSay} işlem</b> ile
+                tüm bütçeleri silinecek. <b>Bu işlem geri alınamaz.</b>
+              </div>
+              <Alan etiket={`Onaylamak için defterin adını yaz: ${d.name}`}>
+                <input
+                  className={inp}
+                  value={silYazi}
+                  autoFocus
+                  placeholder={d.name}
+                  onChange={(e) => setSilYazi(e.target.value)}
+                />
+              </Alan>
+              <div className="mt-3 flex justify-end gap-2">
+                <Btn ghost kucuk onClick={() => { setSilDefterId(null); setSilYazi(""); }}>Vazgeç</Btn>
+                <Btn tehlike kucuk disabled={!eslesme} onClick={silOnayla}>
+                  {eslesme ? "Kalıcı olarak sil" : "Adı eşleşmiyor"}
+                </Btn>
+              </div>
+            </div>
+          );
+        })()}
       </Card>
 
       <Card>

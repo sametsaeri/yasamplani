@@ -58,6 +58,8 @@ export type Task = {
   altlar?: AltGorev[];
   /** takvimde gösterilecek son/görev tarihi (YYYY-AA-GG) */
   tarih?: string;
+  /** kullanıcı listesi (İşyeri / Ev / …); eski kayıtlarda yoksa "Genel" sayılır */
+  liste?: string;
 };
 export type Plan = {
   id: string;

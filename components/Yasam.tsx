@@ -463,6 +463,18 @@ export function GorevView({ db, setDb }: Props) {
   const [filtre, setFiltre] = useState<"tumu" | "acik" | "biten">("tumu");
   const [acik, setAcik] = useState<string | null>(null);
   const [altMetin, setAltMetin] = useState("");
+  // Tasnif listeleri (İşyeri, Ev, …) — "Genel" her zaman vardır
+  const VARSAYILAN_LISTE = "Genel";
+  const [aktifListe, setAktifListe] = useState<string>(VARSAYILAN_LISTE);
+  const [yeniListe, setYeniListe] = useState("");
+  const [listeForm, setListeForm] = useState(false);
+
+  const listeAd = (t: Task) => (t.liste || "").trim() || VARSAYILAN_LISTE;
+  const listeler = useMemo(() => {
+    const s = new Set<string>([VARSAYILAN_LISTE]);
+    db.tasks.forEach((t) => s.add(listeAd(t)));
+    return [...s];
+  }, [db.tasks]);
 
   const guncelle = (id: string, yama: Partial<Task>) =>
     setDb((d) => ({ ...d, tasks: d.tasks.map((x) => (x.id === id ? { ...x, ...yama } : x)) }));
@@ -475,23 +487,130 @@ export function GorevView({ db, setDb }: Props) {
     return t.done ? 100 : 0;
   };
 
+  const listeEkle = () => {
+    const ad = yeniListe.trim();
+    if (!ad) return;
+    if (listeler.some((l) => l.toLocaleLowerCase("tr") === ad.toLocaleLowerCase("tr"))) {
+      setYeniListe("");
+      setListeForm(false);
+      return;
+    }
+    setAktifListe(ad);
+    setYeniListe("");
+    setListeForm(false);
+  };
+
+  /** Listeyi sil — görevler silinmez, "Genel"e taşınır. */
+  const listeSil = (ad: string) => {
+    if (ad === VARSAYILAN_LISTE) return;
+    const hedef = db.tasks.filter((t) => listeAd(t) === ad).length;
+    if (!confirm(`"${ad}" listesi silinsin mi?\n\nBu listedeki ${hedef} görev SİLİNMEZ, "Genel" listesine taşınır.`)) return;
+    setDb((d) => ({
+      ...d,
+      tasks: d.tasks.map((t) => (listeAd(t) === ad ? { ...t, liste: undefined } : t))
+    }));
+    if (aktifListe === ad) setAktifListe(VARSAYILAN_LISTE);
+  };
+
   const ekle = () => {
     if (!metin.trim()) return;
-    setDb((d) => ({ ...d, tasks: [...d.tasks, { id: uid(), text: metin.trim(), prio: oncelik, done: false, aciklama: "", durum: "bekliyor", altlar: [], tarih: tarih || undefined }] }));
+    setDb((d) => ({
+      ...d,
+      tasks: [...d.tasks, {
+        id: uid(), text: metin.trim(), prio: oncelik, done: false, aciklama: "",
+        durum: "bekliyor", altlar: [], tarih: tarih || undefined,
+        liste: aktifListe === VARSAYILAN_LISTE ? undefined : aktifListe
+      }]
+    }));
     setMetin("");
     setTarih("");
   };
 
-  let liste = [...db.tasks].sort((a, c) => Number(a.done) - Number(c.done));
+  let liste = [...db.tasks]
+    .filter((t) => listeAd(t) === aktifListe)
+    .sort((a, c) => Number(a.done) - Number(c.done));
   if (filtre === "acik") liste = liste.filter((t) => !t.done);
   if (filtre === "biten") liste = liste.filter((t) => t.done);
   const bekleyen = db.tasks.filter((t) => !t.done).length;
   const detay = db.tasks.find((t) => t.id === acik) || null;
   const durumRengi: Record<string, string> = { bekliyor: "bg-slate-100 text-slate-600", devam: "bg-amber-100 text-amber-700", tamam: "bg-emerald-100 text-emerald-700" };
 
+  const listeSay = (ad: string) => db.tasks.filter((t) => listeAd(t) === ad).length;
+  const listeBiten = (ad: string) => db.tasks.filter((t) => listeAd(t) === ad && t.done).length;
+
   return (
     <Card>
       <Baslik sag={<span className="text-xs font-normal text-slate-400">{bekleyen} bekleyen</span>}>Görevler</Baslik>
+
+      {/* LİSTELER (tasnif) */}
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
+        {listeler.map((l) => {
+          const o = listeSay(l);
+          const b = listeBiten(l);
+          const secili = l === aktifListe;
+          return (
+            <span key={l} className="relative inline-flex">
+              <button
+                onClick={() => setAktifListe(l)}
+                className={`flex items-center gap-1.5 rounded-l-[10px] border py-1.5 pl-3 pr-2 text-xs font-semibold transition ${
+                  secili
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                } ${l !== VARSAYILAN_LISTE ? "" : "rounded-r-[10px]"}`}
+              >
+                {l}
+                <span className={`rounded-full px-1.5 py-px text-[10px] ${secili ? "bg-white/20" : "bg-slate-100 text-slate-500"}`}>
+                  {b}/{o}
+                </span>
+              </button>
+              {l !== VARSAYILAN_LISTE && (
+                <button
+                  onClick={() => listeSil(l)}
+                  title={`${l} listesini sil (görevler Genel'e taşınır)`}
+                  className={`rounded-r-[10px] border border-l-0 px-1.5 py-1.5 text-xs transition ${
+                    secili
+                      ? "border-slate-900 bg-slate-900 text-slate-300 hover:text-white"
+                      : "border-slate-200 bg-white text-slate-300 hover:bg-red-50 hover:text-red-500"
+                  }`}
+                >
+                  ✕
+                </button>
+              )}
+            </span>
+          );
+        })}
+        <Btn kucuk ghost onClick={() => setListeForm(!listeForm)}>
+          <Plus size={13} className="mr-1 inline" /> Liste Ekle
+        </Btn>
+      </div>
+      {listeForm && (
+        <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div className="min-w-[180px] flex-1">
+            <Alan etiket="Yeni liste adı">
+              <input
+                className={inp}
+                value={yeniListe}
+                autoFocus
+                placeholder="örn: İşyeri, Ev, Sağlık…"
+                onChange={(e) => setYeniListe(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") listeEkle(); }}
+              />
+            </Alan>
+          </div>
+          <Btn onClick={listeEkle}><Plus size={14} className="mr-1 inline" /> Ekle</Btn>
+          <Btn ghost onClick={() => { setListeForm(false); setYeniListe(""); }}>Vazgeç</Btn>
+          <p className="w-full text-[11px] text-slate-500">
+            Liste adı yazdığın anda oluşur ve açılır. Yeni eklediğin görevler bu listeye gider.
+            Listeyi silersen görevler kaybolmaz, “Genel”e taşınır.
+          </p>
+        </div>
+      )}
+
+      {aktifListe !== VARSAYILAN_LISTE && (
+        <p className="mb-2 text-[11px] text-slate-500">
+          📂 <b>{aktifListe}</b> listesine ait görevler — bitenler/bekleyenler sayacı her listenin başında.
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_150px_150px_auto]">
         <Alan etiket="Yeni görev">
           <input className={inp} value={metin} onChange={(e) => setMetin(e.target.value)} placeholder="örn: Faturaları öde"
@@ -514,7 +633,9 @@ export function GorevView({ db, setDb }: Props) {
           </Btn>
         ))}
       </div>
-      {liste.length === 0 ? <Bos yazi="Görev yok." /> : liste.map((t) => {
+      {liste.length === 0 ? (
+        <Bos yazi={`"${aktifListe}" listesinde görev yok. Yukarıdan yeni görev ekleyebilirsin.`} />
+      ) : liste.map((t) => {
         const yz = ilerleme(t);
         return (
         <div key={t.id} className={`border-b border-slate-100 py-2.5 text-sm ${t.done ? "text-slate-400" : ""}`}>
@@ -556,6 +677,14 @@ export function GorevView({ db, setDb }: Props) {
                 type="date" className={inp} value={t.tarih || ""}
                 onChange={(e) => guncelle(t.id, { tarih: e.target.value || undefined })}
               />
+              <span className="mb-1 mt-3 block text-xs font-medium text-slate-500">Liste (tasnif)</span>
+              <select
+                className={inp}
+                value={listeAd(t)}
+                onChange={(e) => guncelle(t.id, { liste: e.target.value === VARSAYILAN_LISTE ? undefined : e.target.value })}
+              >
+                {listeler.map((l) => <option key={l} value={l}>{l}</option>)}
+              </select>
               <span className="mb-1 mt-3 block text-xs font-medium text-slate-500">Durum</span>
               <div className="flex gap-1.5">
                 {(["bekliyor", "devam", "tamam"] as const).map((s) => (
