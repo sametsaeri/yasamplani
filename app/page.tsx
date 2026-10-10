@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { LogOut } from "lucide-react";
+import { BookOpen, ChevronDown, CircleHelp, Lock, LogOut, Wallet } from "lucide-react";
 import Sidebar, { type View } from "../components/Sidebar";
 import KomutPaleti from "../components/KomutPaleti";
 import Finans from "../components/Finans";
@@ -255,6 +255,8 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
   const [kilitHata, setKilitHata] = useState("");
   const sonHareketRef = useRef(Date.now());
   const [araAcik, setAraAcik] = useState(false);
+  // Sağ üstteki "Oturum & Ayarlar" açılır menüsü
+  const [hesapMenusu, setHesapMenusu] = useState(false);
 
   // Ctrl/Cmd + K → arama ve komut paleti (her ekranda)
   useEffect(() => {
@@ -273,6 +275,14 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
   useEffect(() => {
     if (kilitli) setAraAcik(false);
   }, [kilitli]);
+
+  // Esc ile oturum/ayarlar menüsü kapansın
+  useEffect(() => {
+    if (!hesapMenusu) return;
+    const kapat = (e: KeyboardEvent) => { if (e.key === "Escape") setHesapMenusu(false); };
+    window.addEventListener("keydown", kapat);
+    return () => window.removeEventListener("keydown", kapat);
+  }, [hesapMenusu]);
 
   // B5: hareketsizlikte otomatik kilit
   useEffect(() => {
@@ -414,24 +424,62 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
             <h1 className="text-2xl font-bold">{BASLIK[view][0]}</h1>
             <p className="text-[13px] text-slate-500">{BASLIK[view][1]}</p>
           </div>
-          <div className="no-print flex items-center gap-2">
+          <div className="no-print relative flex items-center gap-2">
+            {/* Oturum & Ayarlar menüsü */}
             <button
-              onClick={() => setView("rapor")}
-              title="Oturum yönetimi (kilit, çıkış, otomatik kilit süresi)"
-              className="flex max-w-[220px] items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs text-slate-500 shadow-sm hover:text-slate-900"
+              onClick={() => setHesapMenusu((a) => !a)}
+              title="Oturum ve ayarlar"
+              className="flex max-w-[200px] items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs text-slate-600 shadow-sm hover:text-slate-900"
             >
               <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-slate-900 text-[10px] font-bold text-white">
                 {(kullaniciAd(eposta) || eposta).trim().charAt(0).toLocaleUpperCase("tr")}
               </span>
-              <span className="truncate">{eposta}</span>
+              <span className="truncate">{kullaniciAd(eposta) || eposta}</span>
+              <ChevronDown size={13} className={`shrink-0 transition ${hesapMenusu ? "rotate-180" : ""}`} />
             </button>
-            <button
-              onClick={() => { if (confirm("Çıkış yapılsın mı?")) { cikis(); onCikis(); } }}
-              title="Oturumu kapat"
-              className="flex items-center gap-1 rounded-[10px] border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50"
-            >
-              <LogOut size={13} /> Çıkış
-            </button>
+            {hesapMenusu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setHesapMenusu(false)} />
+                <div className="absolute right-0 top-full z-50 mt-2 w-[262px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+                  <div className="flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-3 py-3">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-900 text-sm font-bold text-white">
+                      {(kullaniciAd(eposta) || eposta).trim().charAt(0).toLocaleUpperCase("tr")}
+                    </span>
+                    <div className="min-w-0">
+                      <b className="block truncate text-[13px]">{kullaniciAd(eposta) || eposta}</b>
+                      <span className="block truncate text-[11px] text-slate-500">{eposta}</span>
+                    </div>
+                  </div>
+                  <div className="py-1">
+                    {[
+                      { ikon: <Lock size={14} />, ad: "Ekranı kilitle", ip: "Şifreyle geri dön", eylem: () => { setKilitli(true); setHesapMenusu(false); } },
+                      { ikon: <Wallet size={14} />, ad: "Oturum yönetimi", ip: "Otomatik kilit süresi, kilitle, çıkış", eylem: () => { setView("rapor"); setHesapMenusu(false); } },
+                      { ikon: <BookOpen size={14} />, ad: "Defterler", ip: `${db.ledgers.length} defter — aç, yönet, sil`, eylem: () => { setView("finans"); setHesapMenusu(false); } },
+                      { ikon: <CircleHelp size={14} />, ad: "Yardım", ip: "Kısa yollar ve SSS", eylem: () => { setView("yardim"); setHesapMenusu(false); } }
+                    ].map((o) => (
+                      <button
+                        key={o.ad}
+                        onClick={o.eylem}
+                        className="flex w-full items-start gap-2.5 px-3 py-2 text-left transition hover:bg-slate-50"
+                      >
+                        <span className="mt-0.5 shrink-0 text-slate-500">{o.ikon}</span>
+                        <span className="min-w-0 flex-1">
+                          <b className="block text-[13px] font-medium">{o.ad}</b>
+                          <span className="block truncate text-[11px] text-slate-500">{o.ip}</span>
+                        </span>
+                      </button>
+                    ))}
+                    <div className="my-1 border-t border-slate-100" />
+                    <button
+                      onClick={() => { if (confirm("Oturum kapatılsın mı?")) { setHesapMenusu(false); cikis(); onCikis(); } }}
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] font-medium text-red-600 transition hover:bg-red-50"
+                    >
+                      <LogOut size={14} /> Oturumu kapat
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
 

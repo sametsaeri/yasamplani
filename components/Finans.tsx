@@ -494,6 +494,20 @@ export default function Finans({ db, setDb }: Props) {
 
   const sablonlar = db.sablonlar.filter((s) => s.ledger_id === db.aktif);
 
+  // Hesap detayı ayrı bir alt sayfa: geride başka hesap/defter görünmesin
+  if (inceleHesap) {
+    return (
+      <HesapDetay
+        db={db}
+        setDb={setDb}
+        hesap={inceleHesap}
+        islemAc={(id) => { setInceleId(null); txAc(undefined, id); }}
+        txDuzenle={(t) => { setInceleId(null); txAc(t); }}
+        kapat={() => setInceleId(null)}
+      />
+    );
+  }
+
   return (
     <div className="space-y-3">
       <Card>
@@ -1006,14 +1020,7 @@ export default function Finans({ db, setDb }: Props) {
         <div className="mt-4 flex justify-end gap-2"><Btn ghost onClick={() => setTxModal(false)}>Vazgeç</Btn><Btn onClick={txKaydet}>Kaydet</Btn></div>
       </Modal>
 
-      <Modal
-        acik={!!inceleHesap}
-        kapat={() => setInceleId(null)}
-        genis
-        baslik={inceleHesap ? `👛 ${inceleHesap.name}` : "Hesap"}
-      >
-        {inceleHesap && <HesapDetay db={db} setDb={setDb} hesap={inceleHesap} islemAc={(id) => { setInceleId(null); txAc(undefined, id); }} txDuzenle={(t) => { setInceleId(null); txAc(t); }} kapat={() => setInceleId(null)} />}
-      </Modal>
+      {/* Hesap detayı artık yukarıda tam sayfa olarak dönüyor (modal değil) */}
 
       {/* Base44: defter silme — adını yazarak onay */}
       <Modal
