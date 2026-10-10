@@ -96,7 +96,19 @@ export type Journal = {
   /** kullanıcı etiketleri (#iş #aile gibi serbest metin) */
   etiketler?: string[];
 };
-export type Note = { id: string; title: string; text: string };
+export type Note = {
+  id: string;
+  title: string;
+  text: string;
+  /** kullanıcı listesi (Şifrelerim / Fikirler…); eski kayıtlarda "Genel" */
+  liste?: string;
+  /** serbest etiketler */
+  etiketler?: string[];
+  pinned?: boolean;
+  /** çöp kutusu: silinen not kaybolmaz, "Silinen Notlar" bölümünde durur */
+  silindi?: boolean;
+  silindiTarih?: string;
+};
 
 export type Db = {
   ledgers: Ledger[];

@@ -1,8 +1,8 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import type { Db, Plan, Task } from "../lib/store";
+import type { Db, Note, Plan, Task } from "../lib/store";
 import { bugun, para, trh, uid } from "../lib/format";
 import { kalanEtiket, yaklasanOdemeler } from "../lib/hatirlatici";
 import { Alan, Baslik, Bos, Btn, Card, Cubuk, SilBtn, inp } from "./ui";
@@ -44,6 +44,63 @@ function PlanSatir({
     </div>
   );
 }
+
+/** Ortak yazı biçimi araç çubuğu (günlük + notlar) */
+function YaziAracCubugu({
+  yaziTipi, setYaziTipi, yaziBoyu, setYaziBoyu, bicimle, onizleme, setOnizleme, alanRef
+}: {
+  yaziTipi: "sans" | "serif" | "mono";
+  setYaziTipi: (v: "sans" | "serif" | "mono") => void;
+  yaziBoyu: number;
+  setYaziBoyu: (v: number) => void;
+  bicimle: (on: string, kap: string) => void;
+  onizleme: boolean;
+  setOnizleme: (v: boolean) => void;
+  alanRef: React.RefObject<HTMLTextAreaElement>;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 p-2">
+      <span className="mr-1 text-[11px] font-medium text-slate-500">Yazı stili:</span>
+      <Btn kucuk ghost={yaziTipi !== "sans"} onClick={() => setYaziTipi("sans")} title="Sans">Sans</Btn>
+      <Btn kucuk ghost={yaziTipi !== "serif"} onClick={() => setYaziTipi("serif")} title="Serif (kitap)">Serif</Btn>
+      <Btn kucuk ghost={yaziTipi !== "mono"} onClick={() => setYaziTipi("mono")} title="Mono">Mono</Btn>
+      <span className="mx-1 h-5 w-px bg-slate-300" />
+      <Btn kucuk ghost onClick={() => bicimle("**", "**")} title="Kalın (Ctrl+B)"><b>K</b></Btn>
+      <Btn kucuk ghost onClick={() => bicimle("*", "*")} title="İtalik (Ctrl+I)"><i>I</i></Btn>
+      <Btn kucuk ghost onClick={() => bicimle("_", "_")} title="Altı çizili (Ctrl+U)"><u>U</u></Btn>
+      <Btn kucuk ghost onClick={() => bicimle("`", "`")} title="Kod">{"<>"}</Btn>
+      <span className="mx-1 h-5 w-px bg-slate-300" />
+      <span className="text-[11px] text-slate-500">Boyut:</span>
+      <Btn kucuk ghost onClick={() => setYaziBoyu(Math.max(12, yaziBoyu - 2))} title="Küçült">A−</Btn>
+      <span className="w-9 text-center text-[11px] font-medium text-slate-600">{yaziBoyu}px</span>
+      <Btn kucuk ghost onClick={() => setYaziBoyu(Math.min(30, yaziBoyu + 2))} title="Büyüt">A+</Btn>
+      <span className="mx-1 h-5 w-px bg-slate-300" />
+      <Btn kucuk ghost={!onizleme} onClick={() => setOnizleme(!onizleme)}>{onizleme ? "✏️ Düzenle" : "👁 Önizle"}</Btn>
+    </div>
+  );
+}
+
+/** Markdown benzeri basit biçimlendirme önizlemesi (günlük + notlar) */
+export function onizleHtml(s: string): string {
+  return s
+    .split("\n")
+    .map((satir) => {
+      let t = satir
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+        .replace(/_(.+?)_/g, "<u>$1</u>")
+        .replace(/`(.+?)`/g, '<code class="rounded bg-slate-100 px-1">$1</code>');
+      t = t.replace(/(^|[^*])\*([^*]+)\*/g, "$1<i>$2</i>");
+      t = t.replace(/^### (.*)$/, '<b class="text-[15px]">$1</b>')
+        .replace(/^## (.*)$/, '<b class="text-[17px]">$1</b>')
+        .replace(/^# (.*)$/, '<b class="text-[19px]">$1</b>')
+        .replace(/^- (.*)$/, "•&nbsp;&nbsp;$1");
+      return `<div class="mb-1">${t || "&nbsp;"}</div>`;
+    })
+    .join("");
+}
+
+export const YAZI_TIPI: Record<string, string> = { sans: "font-sans", serif: "font-serif", mono: "font-mono" };
 
 /** "3/5 tamamlandı · %60" + ilerleme çubuğu */
 function PlanIlerleme({ ozet, sag = true }: { ozet: { toplam: number; biten: number; yuzde: number }; sag?: boolean }) {
@@ -837,7 +894,6 @@ export function GunlukView({ db, setDb }: Props) {
   const [etiketFiltre, setEtiketFiltre] = useState("");
   const alanRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const YAZI_TIPI: Record<string, string> = { sans: "font-sans", serif: "font-serif", mono: "font-mono" };
 
   const etiketEkle = () => {
     const e = yeniEtiket.trim().replace(/^#+/, "").trim();
@@ -885,21 +941,6 @@ export function GunlukView({ db, setDb }: Props) {
     .filter((j) => (etiketFiltre ? (j.etiketler || []).includes(etiketFiltre) : true))
     .filter((j) => !a || (j.title + " " + j.text + " " + (j.etiketler || []).join(" ")).toLocaleLowerCase("tr").includes(a));
 
-  /** Basit markdown benzeri önizleme */
-  const onizleHtml = (s: string) =>
-    s.split("\n").map((satir) => {
-      let t = satir
-        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-        .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
-        .replace(/_(.+?)_/g, "<u>$1</u>")
-        .replace(/`(.+?)`/g, '<code class="rounded bg-slate-100 px-1">$1</code>');
-      t = t.replace(/(^|[^*])\*([^*]+)\*/g, "$1<i>$2</i>");
-      t = t.replace(/^### (.*)$/, '<b class="text-[15px]">$1</b>')
-           .replace(/^## (.*)$/, '<b class="text-[17px]">$1</b>')
-           .replace(/^# (.*)$/, '<b class="text-[19px]">$1</b>')
-           .replace(/^- (.*)$/, "•&nbsp;&nbsp;$1");
-      return '<div class="mb-1">' + (t || "&nbsp;") + "</div>";
-    }).join("");
 
   return (
     <div className="space-y-3">
@@ -975,23 +1016,13 @@ export function GunlukView({ db, setDb }: Props) {
           </div>
 
           {/* Yazı stili araç çubuğu */}
-          <div className="mt-3 flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 p-2">
-            <span className="mr-1 text-[11px] font-medium text-slate-500">Yazı stili:</span>
-            <Btn kucuk ghost={yaziTipi !== "sans"} onClick={() => setYaziTipi("sans")} title="Sans">Sans</Btn>
-            <Btn kucuk ghost={yaziTipi !== "serif"} onClick={() => setYaziTipi("serif")} title="Serif (kitap)">Serif</Btn>
-            <Btn kucuk ghost={yaziTipi !== "mono"} onClick={() => setYaziTipi("mono")} title="Mono">Mono</Btn>
-            <span className="mx-1 h-5 w-px bg-slate-300" />
-            <Btn kucuk ghost onClick={() => bicimle("**", "**")} title="Kalın"><b>K</b></Btn>
-            <Btn kucuk ghost onClick={() => bicimle("*", "*")} title="İtalik"><i>I</i></Btn>
-            <Btn kucuk ghost onClick={() => bicimle("_", "_")} title="Altı çizili"><u>U</u></Btn>
-            <Btn kucuk ghost onClick={() => bicimle("`", "`")} title="Kod">{"<>"}</Btn>
-            <span className="mx-1 h-5 w-px bg-slate-300" />
-            <span className="text-[11px] text-slate-500">Boyut:</span>
-            <Btn kucuk ghost onClick={() => setYaziBoyu(Math.max(12, yaziBoyu - 2))} title="Küçült">A−</Btn>
-            <span className="w-9 text-center text-[11px] font-medium text-slate-600">{yaziBoyu}px</span>
-            <Btn kucuk ghost onClick={() => setYaziBoyu(Math.min(30, yaziBoyu + 2))} title="Büyüt">A+</Btn>
-            <span className="mx-1 h-5 w-px bg-slate-300" />
-            <Btn kucuk ghost={!onizleme} onClick={() => setOnizleme(!onizleme)}>{onizleme ? "✏️ Düzenle" : "👁 Önizle"}</Btn>
+          <div className="mt-3">
+            <YaziAracCubugu
+              yaziTipi={yaziTipi} setYaziTipi={setYaziTipi}
+              yaziBoyu={yaziBoyu} setYaziBoyu={setYaziBoyu}
+              bicimle={bicimle} onizleme={onizleme} setOnizleme={setOnizleme}
+              alanRef={alanRef}
+            />
           </div>
 
           <div className="mt-2">
@@ -1062,42 +1093,402 @@ export function GunlukView({ db, setDb }: Props) {
     </div>
   );
 }
+
 export function NotView({ db, setDb }: Props) {
+  const VARSAYILAN = "Genel";
+  const [aktifListe, setAktifListe] = useState<string>(VARSAYILAN);
+  const [yeniListeAd, setYeniListeAd] = useState("");
+  const [listeForm, setListeForm] = useState(false);
+
+  // Yazma alanı
   const [baslik, setBaslik] = useState("");
   const [metin, setMetin] = useState("");
-  const [ara, setAra] = useState("");
+  const [yaziTipi, setYaziTipi] = useState<"sans" | "serif" | "mono">("sans");
+  const [yaziBoyu, setYaziBoyu] = useState(16);
+  const [onizleme, setOnizleme] = useState(false);
+  const alanRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const ekle = () => {
-    const t = metin.trim() || baslik.trim();
+  // Okuma / düzenleme
+  const [acikNot, setAcikNot] = useState<string | null>(null);
+  const [ara, setAra] = useState("");
+  const [sadeceSabit, setSadeceSabit] = useState(false);
+  // Google Keep tarzı üç nokta menüsü + kart içi düzenleme
+  const [menuNot, setMenuNot] = useState<string | null>(null);
+  const [duzenId, setDuzenId] = useState<string | null>(null);
+  const [duzenBaslik, setDuzenBaslik] = useState("");
+  const [duzenMetin, setDuzenMetin] = useState("");
+
+  const duzenleAc = (n: Note) => {
+    setDuzenId(n.id);
+    setDuzenBaslik(n.title);
+    setDuzenMetin(n.text);
+    setMenuNot(null);
+  };
+  const duzenleKaydet = () => {
+    if (!duzenId) return;
+    const t = duzenMetin.trim() || duzenBaslik.trim();
     if (!t) return;
-    setDb((d) => ({ ...d, notes: [...d.notes, { id: uid(), title: baslik || "Not", text: t }] }));
-    setBaslik(""); setMetin("");
+    duzenle(duzenId, { title: duzenBaslik || t.slice(0, 40), text: duzenMetin.trim() || duzenBaslik });
+    setDuzenId(null);
+  };
+  const notKopyala = (n: Note) => {
+    setDb((d) => ({
+      ...d,
+      notes: [{ ...n, id: uid(), title: `${n.title} (kopya)`, pinned: false }, ...d.notes]
+    }));
+    setMenuNot(null);
   };
 
+  const listeAd = (n: Note) => (n.liste || "").trim() || VARSAYILAN;
+  const listeler = useMemo(() => {
+    const s = new Set<string>([VARSAYILAN]);
+    db.notes.filter((n) => !n.silindi).forEach((n) => s.add(listeAd(n)));
+    return [...s];
+  }, [db.notes]);
+
+  const listeSay = (l: string) => db.notes.filter((n) => !n.silindi && listeAd(n) === l).length;
+
+  const listeEkle = () => {
+    const ad = yeniListeAd.trim();
+    if (!ad) return;
+    if (!listeler.some((l) => l.toLocaleLowerCase("tr") === ad.toLocaleLowerCase("tr"))) {
+      setAktifListe(ad);
+      setYeniListeAd("");
+      setListeForm(false);
+    }
+  };
+
+  /** Listeyi sil — notlar silinmez, "Genel"e taşınır */
+  const listeSil = (ad: string) => {
+    if (ad === VARSAYILAN) return;
+    const n = db.notes.filter((x) => listeAd(x) === ad).length;
+    if (!confirm(`"${ad}" listesi silinsin mi?\n\nBu listedeki ${n} not SİLİNMEZ, "${VARSAYILAN}" listesine taşınır.`)) return;
+    setDb((d) => ({ ...d, notes: d.notes.map((x) => (listeAd(x) === ad ? { ...x, liste: undefined } : x)) }));
+    if (aktifListe === ad) setAktifListe(VARSAYILAN);
+  };
+
+  const bicimle = (on: string, kap: string) => {
+    const el = alanRef.current;
+    if (!el) return;
+    const s = el.selectionStart, b = el.selectionEnd;
+    const secili = metin.slice(s, b) || "metin";
+    setMetin(metin.slice(0, s) + on + secili + kap + metin.slice(b));
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(s + on.length, s + on.length + secili.length);
+    });
+  };
+
+  const kaydet = () => {
+    const t = metin.trim() || baslik.trim();
+    if (!t) return;
+    setDb((d) => ({
+      ...d,
+      notes: [
+        { id: uid(), title: baslik || t.slice(0, 40), text: metin.trim() || baslik, liste: aktifListe === VARSAYILAN ? undefined : aktifListe },
+        ...d.notes
+      ]
+    }));
+    setMetin(""); setBaslik("");
+  };
+
+  const duzenle = (id: string, yama: Partial<Note>) =>
+    setDb((d) => ({ ...d, notes: d.notes.map((n) => (n.id === id ? { ...n, ...yama } : n)) }));
+
   const a = ara.toLocaleLowerCase("tr");
-  const liste = [...db.notes].reverse().filter((n) => !a || ((n.title + " " + n.text).toLocaleLowerCase("tr").includes(a)));
+  const canliNotlar = db.notes.filter((n) => !n.silindi);
+  const copNotlar = db.notes.filter((n) => n.silindi);
+  const liste = canliNotlar
+    .filter((n) => listeAd(n) === aktifListe)
+    .filter((n) => (sadeceSabit ? n.pinned : true))
+    .filter((n) => !a || (n.title + " " + n.text + " " + (n.etiketler || []).join(" ")).toLocaleLowerCase("tr").includes(a))
+    .sort((x, y) => Number(!!y.pinned) - Number(!!x.pinned));
+
+  /** Notu çöpe taşı (kaybolmaz) */
+  const notaCop = (id: string) => {
+    setDb((d) => ({ ...d, notes: d.notes.map((n) => (n.id === id ? { ...n, silindi: true, silindiTarih: bugun(), pinned: false } : n)) }));
+    setMenuNot(null);
+  };
+  /** Çöpten geri al */
+  const notuGeriAl = (id: string) => {
+    setDb((d) => ({ ...d, notes: d.notes.map((n) => (n.id === id ? { ...n, silindi: false, silindiTarih: undefined } : n)) }));
+  };
+  /** Kalıcı sil */
+  const kaliciSil = (id: string) => {
+    const n = db.notes.find((x) => x.id === id);
+    if (!n) return;
+    if (!confirm(`"${n.title}" kalıcı olarak silinecek.\n\nBu işlem GERİ ALINAMAZ. Emin misin?`)) return;
+    setDb((d) => ({ ...d, notes: d.notes.filter((x) => x.id !== id) }));
+  };
+  /** Çöpü boşalt */
+  const copuBosalt = () => {
+    if (!copNotlar.length) return;
+    if (!confirm(`Çöpteki ${copNotlar.length} not kalıcı olarak silinecek.\n\nBu işlem GERİ ALINAMAZ. Emin misin?`)) return;
+    setDb((d) => ({ ...d, notes: d.notes.filter((n) => !n.silindi) }));
+  };
 
   return (
-    <Card>
-      <Baslik>Yeni Not</Baslik>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <Alan etiket="Başlık"><input className={inp} value={baslik} onChange={(e) => setBaslik(e.target.value)} /></Alan>
-        <Alan etiket="İçerik"><input className={inp} value={metin} onChange={(e) => setMetin(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") ekle(); }} /></Alan>
-      </div>
-      <div className="mt-2"><Btn kucuk onClick={ekle}>Ekle</Btn></div>
-      <div className="my-3"><input className={`${inp} max-w-[260px]`} value={ara} onChange={(e) => setAra(e.target.value)} placeholder="Notlarda ara..." /></div>
-      {liste.length === 0 ? <Bos yazi="Not yok." /> : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {liste.map((n) => (
-            <div key={n.id} className="rounded-xl border border-slate-200 p-3">
-              <b>{n.title}</b>
-              <div className="mt-1 text-[13px]">{n.text}</div>
-              <SilBtn onClick={() => setDb((d) => ({ ...d, notes: d.notes.filter((x) => x.id !== n.id) }))} />
-            </div>
-          ))}
+    <div className="space-y-3">
+      {/* Menü dışına tıklayınca kapansın */}
+      {menuNot && <div className="fixed inset-0 z-40" onClick={() => setMenuNot(null)} />}
+      {/* LİSTELER */}
+      <Card>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {listeler.map((l) => {
+            const o = listeSay(l);
+            const secili = l === aktifListe;
+            return (
+              <span key={l} className="inline-flex">
+                <button
+                  onClick={() => setAktifListe(l)}
+                  className={`flex items-center gap-1.5 rounded-l-[10px] border py-1.5 pl-3 pr-2 text-xs font-semibold transition ${
+                    secili ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  } ${l === VARSAYILAN ? "rounded-r-[10px]" : ""}`}
+                >
+                  📁 {l}
+                  <span className={`rounded-full px-1.5 py-px text-[10px] ${secili ? "bg-white/20" : "bg-slate-100 text-slate-500"}`}>{o}</span>
+                </button>
+                {l !== VARSAYILAN && (
+                  <button
+                    onClick={() => listeSil(l)}
+                    title={`${l} listesini sil (notlar Genel'e taşınır)`}
+                    className={`rounded-r-[10px] border border-l-0 px-1.5 py-1.5 text-xs transition ${
+                      secili ? "border-slate-900 bg-slate-900 text-slate-300 hover:text-white" : "border-slate-200 bg-white text-slate-300 hover:bg-red-50 hover:text-red-500"
+                    }`}
+                  >
+                    ✕
+                  </button>
+                )}
+              </span>
+            );
+          })}
+          <Btn kucuk ghost onClick={() => setListeForm(!listeForm)}>
+            <Plus size={13} className="mr-1 inline" /> Liste Ekle
+          </Btn>
         </div>
-      )}
-    </Card>
+        {listeForm && (
+          <div className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="min-w-[200px] flex-1">
+              <Alan etiket="Yeni liste adı">
+                <input
+                  className={inp}
+                  value={yeniListeAd}
+                  autoFocus
+                  placeholder="örn: Şifrelerim, Fikirler, Alışveriş…"
+                  onChange={(e) => setYeniListeAd(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") listeEkle(); }}
+                />
+              </Alan>
+            </div>
+            <Btn onClick={listeEkle}><Plus size={14} className="mr-1 inline" /> Oluştur</Btn>
+            <Btn ghost onClick={() => { setListeForm(false); setYeniListeAd(""); }}>Vazgeç</Btn>
+            <p className="w-full text-[11px] text-slate-500">
+              Liste adı yazınca hemen oluşur ve açılır. Buradaki notlar bu listeye kaydedilir.
+              Listeyi silersen notlar kaybolmaz, "{VARSAYILAN}"e taşınır.
+            </p>
+          </div>
+        )}
+      </Card>
+
+      {/* NOT ALANI */}
+      <Card>
+        <Baslik sag={<span className="text-xs font-normal text-slate-400">📁 {aktifListe}</span>}>
+          Not Al
+        </Baslik>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_200px]">
+          <Alan etiket="Başlık">
+            <input className={inp} value={baslik} onChange={(e) => setBaslik(e.target.value)} placeholder="örn: E-posta şifrelerim" />
+          </Alan>
+          <Alan etiket="Liste">
+            <select
+              className={inp}
+              value={aktifListe}
+              onChange={(e) => {
+                if (e.target.value === "__yeni__") { setListeForm(true); return; }
+                setAktifListe(e.target.value);
+              }}
+            >
+              {listeler.map((l) => <option key={l} value={l}>{l}</option>)}
+              <option value="__yeni__">+ Yeni liste oluştur…</option>
+            </select>
+          </Alan>
+        </div>
+        <div className="mt-2">
+          <YaziAracCubugu
+            yaziTipi={yaziTipi} setYaziTipi={setYaziTipi}
+            yaziBoyu={yaziBoyu} setYaziBoyu={setYaziBoyu}
+            bicimle={bicimle} onizleme={onizleme} setOnizleme={setOnizleme}
+            alanRef={alanRef}
+          />
+        </div>
+        <div className="mt-2">
+          {onizleme ? (
+            <div
+              className={`min-h-[240px] rounded-[9px] border border-slate-200 bg-white p-4 leading-relaxed ${YAZI_TIPI[yaziTipi]}`}
+              style={{ fontSize: yaziBoyu }}
+              dangerouslySetInnerHTML={{ __html: onizleHtml(metin) || '<span style="color:#cbd5e1">Önizle için yazı gir…</span>' }}
+            />
+          ) : (
+            <textarea
+              ref={alanRef}
+              className={`${inp} min-h-[240px] resize-y leading-relaxed ${YAZI_TIPI[yaziTipi]}`}
+              style={{ fontSize: yaziBoyu }}
+              value={metin}
+              onChange={(e) => setMetin(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) kaydet(); }}
+              placeholder={"Notunu yaz…\n\nBiçimlendirme: **kalın**, *italik*, _altı çizili_, `kod`, # başlık, - liste satırı\nKaydetmek için Ctrl+Enter"}
+            />
+          )}
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Btn onClick={kaydet}>Kaydet</Btn>
+          <Btn ghost onClick={() => { setMetin(""); setBaslik(""); }}>Temizle</Btn>
+          <span className="self-center text-[11px] text-slate-400">Ctrl+Enter ile hızlı kaydet</span>
+        </div>
+      </Card>
+
+      {/* NOTLAR */}
+      <Card>
+        <Baslik sag={
+          <span className="text-xs font-normal text-slate-400">
+            📁 {aktifListe} · {liste.length} not
+          </span>
+        }>
+          Notlarım
+        </Baslik>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <input className={`${inp} max-w-[260px]`} value={ara} onChange={(e) => setAra(e.target.value)} placeholder="Notlarda ara..." />
+          <Btn kucuk ghost={!sadeceSabit} onClick={() => setSadeceSabit(!sadeceSabit)}>
+            {sadeceSabit ? "★ Sabitlenenler" : "📌 Tümü"}
+          </Btn>
+        </div>
+
+        {liste.length === 0 ? (
+          <Bos yazi={`"${aktifListe}" listesinde not yok. Yukarıdaki Not Al bölümünden yazabilirsin.`} />
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {liste.map((n) => (
+              <div
+                key={n.id}
+                className={`group relative flex flex-col rounded-2xl border bg-white p-4 transition hover:shadow-md ${
+                  n.pinned ? "border-amber-300 bg-amber-50/40" : "border-slate-200 hover:border-slate-400"
+                }`}
+              >
+                {/* ⋮ Google Keep tarzı menü */}
+                <button
+                  onClick={() => setMenuNot(menuNot === n.id ? null : n.id)}
+                  title="Not işlemleri"
+                  className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-900"
+                >
+                  <span className="-mt-1 text-base leading-none tracking-widest">⋮</span>
+                </button>
+
+                {menuNot === n.id && (
+                  <div className="absolute right-2 top-9 z-30 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+                    {[
+                      { e: n.pinned ? "★ Sabitlemeyi kaldır" : "📌 Başa sabitle", f: () => { duzenle(n.id, { pinned: !n.pinned }); setMenuNot(null); } },
+                      { e: "✏️ Düzenle", f: () => duzenleAc(n) },
+                      { e: "📋 Kopyala", f: () => notKopyala(n) },
+                      { e: `📁 Listeyi değiştir (${listeAd(n)})`, f: () => { setDuzenId(n.id); setDuzenBaslik(n.title); setDuzenMetin(n.text); setMenuNot(null); } }
+                    ].map((o) => (
+                      <button key={o.e} onClick={o.f}
+                        className="block w-full px-3 py-2 text-left text-[13px] text-slate-700 transition hover:bg-slate-50">
+                        {o.e}
+                      </button>
+                    ))}
+                    <div className="my-1 border-t border-slate-100" />
+                    <button onClick={() => notaCop(n.id)}
+                      className="block w-full px-3 py-2 text-left text-[13px] font-medium text-red-600 transition hover:bg-red-50">
+                      🗑 Sil (çöpe taşı)
+                    </button>
+                  </div>
+                )}
+
+                {duzenId === n.id ? (
+                  /* Kart içi düzenleme */
+                  <div className="space-y-2">
+                    <input
+                      className={`${inp} font-semibold`}
+                      value={duzenBaslik}
+                      autoFocus
+                      onChange={(e) => setDuzenBaslik(e.target.value)}
+                      placeholder="Başlık"
+                    />
+                    <textarea
+                      className={`${inp} min-h-[130px] resize-y leading-relaxed ${YAZI_TIPI[yaziTipi]}`}
+                      style={{ fontSize: Math.max(12, yaziBoyu - 2) }}
+                      value={duzenMetin}
+                      onChange={(e) => setDuzenMetin(e.target.value)}
+                    />
+                    <Alan etiket="Liste">
+                      <select className={inp} value={listeAd(n)}
+                        onChange={(e) => duzenle(n.id, { liste: e.target.value === VARSAYILAN ? undefined : e.target.value })}>
+                        {listeler.map((l) => <option key={l} value={l}>{l}</option>)}
+                      </select>
+                    </Alan>
+                    <div className="flex gap-2">
+                      <Btn kucuk onClick={duzenleKaydet}>Kaydet</Btn>
+                      <Btn kucuk ghost onClick={() => setDuzenId(null)}>Vazgeç</Btn>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="mb-1.5 pr-7">
+                      <b className="block break-words text-[14px] leading-snug">{n.title}</b>
+                    </div>
+                    <div
+                      className={`min-h-[60px] flex-1 whitespace-pre-wrap text-[13px] leading-relaxed text-slate-600 ${YAZI_TIPI[yaziTipi]}`}
+                      style={{ fontSize: Math.max(12, yaziBoyu - 2) }}
+                      dangerouslySetInnerHTML={{ __html: onizleHtml(n.text) }}
+                    />
+                    <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-slate-100 pt-2">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">📁 {listeAd(n)}</span>
+                      {(n.etiketler || []).map((e) => (
+                        <span key={e} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">#{e}</span>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 🗑 SİLİNEN NOTLAR */}
+        <Card>
+          <Baslik sag={<span className="text-xs font-normal text-slate-400">{copNotlar.length} not</span>}>
+            🗑 Silinen Notlar
+          </Baslik>
+          {copNotlar.length === 0 ? (
+            <Bos yazi="Çöp boş. Silinen notlar burada tutulur, dilersen geri alabilirsin." />
+          ) : (
+            <>
+              <p className="mb-3 text-xs text-slate-500">
+                Silinen notlar <b>kaybolmaz</b>. Buradan geri alabilir veya kalıcı olarak silebilirsin.
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {copNotlar.map((n) => (
+                  <div key={n.id} className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="min-w-0 flex-1">
+                      <b className="block truncate text-[13px] text-slate-500 line-through">{n.title}</b>
+                      <span className="text-[11px] text-slate-400">
+                        📁 {listeAd(n)}{n.silindiTarih ? ` · ${trh(n.silindiTarih)} tarihinde silindi` : ""}
+                      </span>
+                    </div>
+                    <Btn kucuk ghost onClick={() => notuGeriAl(n.id)}>↩ Geri al</Btn>
+                    <Btn kucuk tehlike onClick={() => kaliciSil(n.id)}>Kalıcı sil</Btn>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3">
+                <Btn tehlike onClick={copuBosalt}>🗑 Çöpü boşalt ({copNotlar.length})</Btn>
+              </div>
+            </>
+          )}
+        </Card>
+
+        <div className="text-xs text-slate-400">Not: "Sil" notu çöpe taşır (kaybolmaz). Kalıcı silme yalnızca çöp bölümünden yapılır.</div>
+      </Card>
+    </div>
   );
 }
