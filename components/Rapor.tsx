@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bot, Camera, Download, Printer, Send, Upload } from "lucide-react";
+import { Bot, Camera, Download, LogOut, Printer, Send, Upload } from "lucide-react";
 import type { Db } from "../lib/store";
 import { ayToplam, artanKategoriler, butceOneri, kategoriGider } from "../lib/finance";
 import { buAy, bugun, oncekiAy, para, trh, uid } from "../lib/format";
@@ -26,7 +26,18 @@ import {
 import { icgoruler, baglamMetni } from "../lib/insights";
 import { Alan, Baslik, Bos, Btn, Card, Cubuk, KategoriIkon, inp } from "./ui";
 
-type Props = { db: Db; setDb: (u: (d: Db) => Db) => void; replaceAll: (d: Db) => void };
+type Props = {
+  db: Db;
+  setDb: (u: (d: Db) => Db) => void;
+  replaceAll: (d: Db) => void;
+  /** Oturum yönetimi bölümü için (panelden gelir) */
+  oturum?: {
+    eposta: string;
+    ad: string;
+    kilitle: () => void;
+    cikisYap: () => void;
+  };
+};
 
 /** Toplu fiş OCR: her fotoğraf için ayrı bir işlem taslağı */
 type FisKayit = {
@@ -39,7 +50,7 @@ type FisKayit = {
   taslak: IslemTaslak | null;
 };
 
-export function RaporView({ db, setDb, replaceAll, anahtar }: Props & { anahtar: string }) {
+export function RaporView({ db, setDb, replaceAll, anahtar, oturum }: Props & { anahtar: string }) {
   const aktifDefter = db.ledgers.find((d) => d.id === db.aktif);
   const [izin, setIzin] = useState<string>(() =>
     typeof window !== "undefined" && "Notification" in window ? Notification.permission : "desteklenmiyor"
@@ -236,7 +247,43 @@ export function RaporView({ db, setDb, replaceAll, anahtar }: Props & { anahtar:
       </Card>
 
       <Card>
-        <Baslik>🔐 Güvenlik <span className="text-xs font-normal text-slate-400">• otomatik kilit</span></Baslik>
+        <Baslik>🔐 Oturum Yönetimi <span className="text-xs font-normal text-slate-400">• giriş, kilit, çıkış</span></Baslik>
+
+        {/* Kim giriş yapmış */}
+        {oturum && (
+          <div className="mb-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-lg shadow-sm">
+              {oturum.ad ? oturum.ad.trim().charAt(0).toLocaleUpperCase("tr") : "👤"}
+            </span>
+            <div className="min-w-0 flex-1">
+              <b className="block truncate text-sm">{oturum.ad || oturum.eposta}</b>
+              <span className="block truncate text-xs text-slate-500">{oturum.eposta}</span>
+            </div>
+            <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+              ● Etkin oturum
+            </span>
+          </div>
+        )}
+
+        {/* Eylemler: kilitle / çıkış */}
+        {oturum && (
+          <div className="mb-4 flex flex-wrap gap-2">
+            <Btn kucuk onClick={oturum.kilitle}>
+              🔒 Ekranı kilitle
+            </Btn>
+            <Btn kucuk onClick={oturum.cikisYap}>
+              <LogOut size={13} className="mr-1 inline" /> Oturumu kapat
+            </Btn>
+            <Btn kucuk ghost onClick={() => { setDb((d) => ({ ...d, ayarlar: { ...d.ayarlar, kilitDakika: 0 } })); }}>
+              Otomatik kilidi kapat
+            </Btn>
+          </div>
+        )}
+
+        {/* Otomatik kilit süresi */}
+        <div className="mb-2 border-t border-slate-100 pt-3">
+          <div className="mb-2 text-xs font-medium text-slate-500">Otomatik kilit</div>
+        </div>
         <div className="flex flex-wrap items-end gap-3">
           <Alan etiket="Ne zaman kilitlensin?">
             <select

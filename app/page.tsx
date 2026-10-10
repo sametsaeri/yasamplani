@@ -415,9 +415,19 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
             <p className="text-[13px] text-slate-500">{BASLIK[view][1]}</p>
           </div>
           <div className="no-print flex items-center gap-2">
-            <span className="rounded-full bg-white px-3 py-1.5 text-xs text-slate-500 shadow-sm">👤 {eposta}</span>
+            <button
+              onClick={() => setView("rapor")}
+              title="Oturum yönetimi (kilit, çıkış, otomatik kilit süresi)"
+              className="flex max-w-[220px] items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs text-slate-500 shadow-sm hover:text-slate-900"
+            >
+              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-slate-900 text-[10px] font-bold text-white">
+                {(kullaniciAd(eposta) || eposta).trim().charAt(0).toLocaleUpperCase("tr")}
+              </span>
+              <span className="truncate">{eposta}</span>
+            </button>
             <button
               onClick={() => { if (confirm("Çıkış yapılsın mı?")) { cikis(); onCikis(); } }}
+              title="Oturumu kapat"
               className="flex items-center gap-1 rounded-[10px] border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50"
             >
               <LogOut size={13} /> Çıkış
@@ -441,7 +451,20 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
           {view === "kilo" && <KiloView db={db} setDb={setDb} />}
           {view === "gunluk" && <GunlukView db={db} setDb={setDb} />}
           {view === "not" && <NotView db={db} setDb={setDb} />}
-          {view === "rapor" && <RaporView db={db} setDb={setDb} replaceAll={replaceAll} anahtar={NS} />}
+          {view === "rapor" && (
+            <RaporView
+              db={db}
+              setDb={setDb}
+              replaceAll={replaceAll}
+              anahtar={NS}
+              oturum={{
+                eposta,
+                ad: kullaniciAd(eposta),
+                kilitle: () => setKilitli(true),
+                cikisYap: () => { if (confirm("Oturum kapatılsın mı?")) { cikis(); onCikis(); } }
+              }}
+            />
+          )}
           {view === "asistan" && <AsistanView db={db} setDb={setDb} />}
           {view === "yardim" && <YardimView />}
         </div>
@@ -457,7 +480,7 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
               ? `${db.ayarlar.kilitDakika} dakika hareketsiz kaldın veya başka programa geçtin.`
               : "Ekran kilitlendi."}{" "}
             Devam etmek için şifreni gir.{" "}
-            <span className="text-slate-500">(Bu süreyi Rapor → Güvenlik'ten değiştirebilirsin)</span>
+            <span className="text-slate-500">(Süreyi Rapor → Oturum Yönetimi'nden değiştirebilirsin)</span>
           </p>
           <form
             className="mt-2 flex w-full max-w-[320px] gap-2"
