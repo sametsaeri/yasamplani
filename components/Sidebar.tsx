@@ -94,7 +94,8 @@ export default function Sidebar({
   ledgers,
   aktif,
   setAktif,
-  onAra
+  onAra,
+  panel
 }: {
   view: View;
   setView: (v: View) => void;
@@ -102,6 +103,8 @@ export default function Sidebar({
   aktif: string;
   setAktif: (id: string) => void;
   onAra?: () => void;
+  /** Sağ üstteki kullanıcı paneli (defter + oturum + ayarlar) */
+  panel?: React.ReactNode;
 }) {
   const headerRef = useRef<HTMLElement | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
@@ -219,8 +222,7 @@ export default function Sidebar({
                 <kbd className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium tracking-wide">Ctrl K</kbd>
               </button>
             )}
-            {/* Defter rozeti kaldırıldı: defter bilgisi ve oturum yönetimi sağ üstteki
-              panelde bir arada. */}
+            {panel}
           </div>
 
           <span className="hidden shrink-0 rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-slate-400 lg:inline-block">

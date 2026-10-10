@@ -1,4 +1,6 @@
-import React, { useId } from "react";
+import React, { useEffect, useId, useState } from "react";
+import type { Db } from "../lib/store";
+import type { View } from "./Sidebar";
 
 export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <div className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ${className}`}>{children}</div>;
@@ -127,15 +129,173 @@ import {
   Banknote,
   Briefcase,
   Car,
+  ChevronDown,
   CircleDot,
+  CircleHelp,
   CreditCard,
   Home,
   Landmark,
+  Lock,
+  LogOut,
   PiggyBank,
+  Plus,
   Receipt,
+  Settings,
   ShoppingCart,
   UtensilsCrossed
 } from "lucide-react";
+
+/**
+ * Üst barın sağ ucundaki kullanıcı paneli: defter seçimi, oturum (kilitle /
+ * çıkış / otomatik kilit süresi) ve ayarlar tek yerde.
+ */
+export function KullaniciPaneli({
+  db,
+  setDb,
+  eposta,
+  ad,
+  setAktif,
+  setView,
+  kilitle,
+  cikisYap
+}: {
+  db: Db;
+  setDb: (u: (d: Db) => Db) => void;
+  eposta: string;
+  ad: string;
+  setAktif: (id: string) => void;
+  setView: (v: View) => void;
+  kilitle: () => void;
+  cikisYap: () => void;
+}) {
+  const [acik, setAcik] = useState(false);
+  const basHarf = (ad || eposta).trim().charAt(0).toLocaleUpperCase("tr");
+  const aktifDefter = db.ledgers.find((d) => d.id === db.aktif);
+
+  useEffect(() => {
+    if (!acik) return;
+    const kapat = (e: KeyboardEvent) => { if (e.key === "Escape") setAcik(false); };
+    window.addEventListener("keydown", kapat);
+    return () => window.removeEventListener("keydown", kapat);
+  }, [acik]);
+
+  return (
+    <div className="relative shrink-0 no-print">
+      <button
+        onClick={() => setAcik((v) => !v)}
+        title="Oturum ve ayarlar"
+        className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 py-1 pl-1 pr-2.5 text-white transition hover:bg-white/10"
+        style={{ color: undefined }}
+      >
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-white text-[11px] font-bold text-slate-900">{basHarf}</span>
+        <span className="hidden max-w-[120px] truncate text-[12.5px] font-medium sm:block">{ad || eposta}</span>
+        <ChevronDown size={14} className={`shrink-0 text-slate-400 transition-transform ${acik ? "rotate-180" : ""}`} />
+      </button>
+
+      {acik && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setAcik(false)} />
+          <div className="absolute right-0 top-full z-50 mt-2 max-h-[calc(100vh-140px)] w-[288px] overflow-auto rounded-2xl border border-slate-200 bg-white text-left text-slate-900 shadow-xl">
+            <div className="sticky top-0 z-10 flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-3 py-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-900 text-sm font-bold text-white">{basHarf}</span>
+              <div className="min-w-0">
+                <b className="block truncate text-[13px]">{ad || eposta}</b>
+                <span className="block truncate text-[11px] text-slate-500">{eposta}</span>
+              </div>
+            </div>
+
+            {/* DEFTER */}
+            <div className="border-b border-slate-100 py-1.5">
+              <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Defter · {db.ledgers.length}
+              </div>
+              {db.ledgers.map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => { setAktif(d.id); setAcik(false); }}
+                  title={d.aciklama || d.name}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition hover:bg-slate-50"
+                >
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: d.color }} />
+                  <span className={`min-w-0 flex-1 truncate ${d.id === db.aktif ? "font-semibold text-slate-900" : ""}`}>{d.name}</span>
+                  {d.gizli && <span className="text-[10px]">🙈</span>}
+                  {d.paraBirimi && <span className="shrink-0 text-[11px] text-slate-400">{d.paraBirimi}</span>}
+                  {d.id === db.aktif && <span className="shrink-0 text-[11px] font-bold text-slate-900">✓</span>}
+                </button>
+              ))}
+              <button
+                onClick={() => { setAcik(false); setView("finans"); }}
+                className="mt-1 flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[12px] font-medium text-slate-600 transition hover:bg-slate-50"
+              >
+                <Plus size={13} /> Defter yönetimi (yeni, sil, gizle)
+              </button>
+            </div>
+
+            {/* OTURUM */}
+            <div className="border-b border-slate-100 py-1.5">
+              <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Oturum</div>
+              <button
+                onClick={() => { kilitle(); setAcik(false); }}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition hover:bg-slate-50"
+              >
+                <Lock size={14} className="shrink-0 text-slate-500" /> Ekranı kilitle
+              </button>
+              <button
+                onClick={() => { cikisYap(); setAcik(false); }}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] font-medium text-red-600 transition hover:bg-red-50"
+              >
+                <LogOut size={14} className="shrink-0" /> Oturumu kapat
+              </button>
+              <div className="mt-1 border-t border-slate-100 px-3 pb-1 pt-2">
+                <label className="mb-1 block text-[11px] font-medium text-slate-500">
+                  Otomatik kilit — ne zaman kilitlensin?
+                </label>
+                <select
+                  className="w-full rounded-[9px] border border-slate-200 bg-white px-2 py-1.5 text-[12px] outline-none focus:border-slate-900"
+                  value={String(db.ayarlar.kilitDakika ?? 0)}
+                  onChange={(e) => setDb((d) => ({ ...d, ayarlar: { ...d.ayarlar, kilitDakika: Number(e.target.value) } }))}
+                >
+                  <option value="0">Kapalı — hiç kilitleme</option>
+                  {[1, 2, 3, 5, 10, 15, 30].map((n) => <option key={n} value={n}>{n} dakika sonra</option>)}
+                  <option value="60">1 saat sonra</option>
+                  <option value="120">2 saat sonra</option>
+                  <option value="240">4 saat sonra</option>
+                </select>
+                <p className="mt-1 text-[10px] leading-snug text-slate-400">
+                  Boşta kalınca <b>ve</b> başka programa geçince bu süre kadar uzaklaşınca kilitlenir.
+                  Süre dolmadan dönersen kilit açık kalır.
+                </p>
+              </div>
+            </div>
+
+            {/* AYARLAR */}
+            <div className="py-1.5">
+              <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Ayarlar</div>
+              <button
+                onClick={() => { setAcik(false); setView("rapor"); }}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition hover:bg-slate-50"
+              >
+                <Settings size={14} className="shrink-0 text-slate-500" /> Ayarlar &amp; yedekler
+              </button>
+              <button
+                onClick={() => { setAcik(false); setView("yardim"); }}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition hover:bg-slate-50"
+              >
+                <CircleHelp size={14} className="shrink-0 text-slate-500" /> Yardım
+              </button>
+            </div>
+
+            {aktifDefter?.aciklama && (
+              <div className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-400">
+                Aktif defter: {aktifDefter.aciklama}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function KategoriIkon({ kat, boyut = 15 }: { kat: string; boyut?: number }) {
   switch (kat) {

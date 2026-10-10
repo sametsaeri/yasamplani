@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, CircleHelp, Lock, LogOut, Plus, Settings } from "lucide-react";
 import Sidebar, { type View } from "../components/Sidebar";
 import KomutPaleti from "../components/KomutPaleti";
 import Finans from "../components/Finans";
@@ -16,7 +15,7 @@ import { buAy, bugun, para, trh } from "../lib/format";
 import { cikis, giris, kullaniciAd, oturum, veriAnahtari } from "../lib/auth";
 import { otoYedekle } from "../lib/yedek";
 import { diskYedekYaz } from "../lib/elektron";
-import { Btn, Card, Stat } from "../components/ui";
+import { Btn, Card, KullaniciPaneli, Stat } from "../components/ui";
 import { bugunkuOdemeler, kalanEtiket, TUR_EMOJI, TUR_ETIKET, yaklasanOdemeler } from "../lib/hatirlatici";
 
 const BASLIK: Record<View, [string, string]> = {
@@ -255,8 +254,8 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
   const [kilitHata, setKilitHata] = useState("");
   const sonHareketRef = useRef(Date.now());
   const [araAcik, setAraAcik] = useState(false);
-  // Sağ üstteki "Oturum & Ayarlar" açılır menüsü
-  const [hesapMenusu, setHesapMenusu] = useState(false);
+  // Not: kullanıcı paneli artık üst barda (KullaniciPaneli bileşeni) —
+  // oturum menüsü state'i burada tutulmaz.
 
   // Ctrl/Cmd + K → arama ve komut paleti (her ekranda)
   useEffect(() => {
@@ -276,13 +275,7 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
     if (kilitli) setAraAcik(false);
   }, [kilitli]);
 
-  // Esc ile oturum/ayarlar menüsü kapansın
-  useEffect(() => {
-    if (!hesapMenusu) return;
-    const kapat = (e: KeyboardEvent) => { if (e.key === "Escape") setHesapMenusu(false); };
-    window.addEventListener("keydown", kapat);
-    return () => window.removeEventListener("keydown", kapat);
-  }, [hesapMenusu]);
+  // Esc ile oturum/ayarlar menüsü kapansın (menü kendi içinde yönetiliyor)
 
   // B5: hareketsizlikte otomatik kilit
   useEffect(() => {
@@ -397,6 +390,18 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
         aktif={db.aktif}
         setAktif={setAktif}
         onAra={() => setAraAcik(true)}
+        panel={
+          <KullaniciPaneli
+            db={db}
+            setDb={setDb}
+            eposta={eposta}
+            ad={kullaniciAd(eposta)}
+            setAktif={setAktif}
+            setView={setView}
+            kilitle={() => setKilitli(true)}
+            cikisYap={() => { if (confirm("Oturum kapatılsın mı?")) { cikis(); onCikis(); } }}
+          />
+        }
       />
       <KomutPaleti
         db={db}
@@ -423,127 +428,6 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
           <div>
             <h1 className="text-2xl font-bold">{BASLIK[view][0]}</h1>
             <p className="text-[13px] text-slate-500">{BASLIK[view][1]}</p>
-          </div>
-          <div className="no-print relative flex items-center gap-2">
-            {/* Oturum & Ayarlar menüsü */}
-            <button
-              onClick={() => setHesapMenusu((a) => !a)}
-              title="Oturum ve ayarlar"
-              className="flex max-w-[200px] items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs text-slate-600 shadow-sm hover:text-slate-900"
-            >
-              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-slate-900 text-[10px] font-bold text-white">
-                {(kullaniciAd(eposta) || eposta).trim().charAt(0).toLocaleUpperCase("tr")}
-              </span>
-              <span className="truncate">{kullaniciAd(eposta) || eposta}</span>
-              <ChevronDown size={13} className={`shrink-0 transition ${hesapMenusu ? "rotate-180" : ""}`} />
-            </button>
-            {hesapMenusu && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setHesapMenusu(false)} />
-                <div className="absolute right-0 top-full z-50 mt-2 max-h-[calc(100vh-140px)] w-[288px] overflow-auto rounded-2xl border border-slate-200 bg-white shadow-xl">
-                  <div className="sticky top-0 z-10 flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-3 py-3">
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-900 text-sm font-bold text-white">
-                      {(kullaniciAd(eposta) || eposta).trim().charAt(0).toLocaleUpperCase("tr")}
-                    </span>
-                    <div className="min-w-0">
-                      <b className="block truncate text-[13px]">{kullaniciAd(eposta) || eposta}</b>
-                      <span className="block truncate text-[11px] text-slate-500">{eposta}</span>
-                    </div>
-                  </div>
-
-                  {/* DEFTER SEÇİMİ */}
-                  <div className="border-b border-slate-100 py-1.5">
-                    <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                      Defter · {db.ledgers.length}
-                    </div>
-                    {db.ledgers.map((d) => (
-                      <button
-                        key={d.id}
-                        onClick={() => { setAktif(d.id); setHesapMenusu(false); }}
-                        title={d.aciklama || d.name}
-                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition hover:bg-slate-50"
-                      >
-                        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: d.color }} />
-                        <span className={`min-w-0 flex-1 truncate ${d.id === db.aktif ? "font-semibold text-slate-900" : ""}`}>
-                          {d.name}
-                        </span>
-                        {d.gizli && <span className="text-[10px]">🙈</span>}
-                        {d.paraBirimi && <span className="shrink-0 text-[11px] text-slate-400">{d.paraBirimi}</span>}
-                        {d.id === db.aktif && <span className="shrink-0 text-[11px] font-bold text-slate-900">✓</span>}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => { setHesapMenusu(false); setView("finans"); }}
-                      className="mt-1 flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[12px] font-medium text-slate-600 transition hover:bg-slate-50"
-                    >
-                      <Plus size={13} /> Defter yönetimi (yeni, sil, gizle)
-                    </button>
-                  </div>
-
-                  {/* OTURUM — ayar panelinin içinde */}
-                  <div className="border-b border-slate-100 py-1.5">
-                    <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                      Oturum
-                    </div>
-                    <button
-                      onClick={() => { setKilitli(true); setHesapMenusu(false); }}
-                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition hover:bg-slate-50"
-                    >
-                      <Lock size={14} className="shrink-0 text-slate-500" /> Ekranı kilitle
-                    </button>
-                    <button
-                      onClick={() => { if (confirm("Oturum kapatılsın mı?")) { setHesapMenusu(false); cikis(); onCikis(); } }}
-                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] font-medium text-red-600 transition hover:bg-red-50"
-                    >
-                      <LogOut size={14} className="shrink-0" /> Oturumu kapat
-                    </button>
-
-                    {/* Otomatik kilit süresi — doğrudan panelde */}
-                    <div className="mt-1 border-t border-slate-100 px-3 pb-1 pt-2">
-                      <label className="mb-1 block text-[11px] font-medium text-slate-500">
-                        Otomatik kilit — ne zaman kilitlensin?
-                      </label>
-                      <select
-                        className="w-full rounded-[9px] border border-slate-200 bg-white px-2 py-1.5 text-[12px] outline-none focus:border-slate-900"
-                        value={String(db.ayarlar.kilitDakika ?? 0)}
-                        onChange={(e) =>
-                          setDb((d) => ({ ...d, ayarlar: { ...d.ayarlar, kilitDakika: Number(e.target.value) } }))
-                        }
-                      >
-                        <option value="0">Kapalı — hiç kilitleme</option>
-                        {[1, 2, 3, 5, 10, 15, 30].map((n) => <option key={n} value={n}>{n} dakika sonra</option>)}
-                        <option value="60">1 saat sonra</option>
-                        <option value="120">2 saat sonra</option>
-                        <option value="240">4 saat sonra</option>
-                      </select>
-                      <p className="mt-1 text-[10px] leading-snug text-slate-400">
-                        Boşta kalınca <b>ve</b> başka programa geçince bu süre kadar uzaklaşınca kilitlenir.
-                        Süre dolmadan dönersen kilit açık kalır.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* AYARLAR */}
-                  <div className="py-1.5">
-                    <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                      Ayarlar
-                    </div>
-                    <button
-                      onClick={() => { setView("rapor"); setHesapMenusu(false); }}
-                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition hover:bg-slate-50"
-                    >
-                      <Settings size={14} className="shrink-0 text-slate-500" /> Ayarlar & yedekler
-                    </button>
-                    <button
-                      onClick={() => { setView("yardim"); setHesapMenusu(false); }}
-                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition hover:bg-slate-50"
-                    >
-                      <CircleHelp size={14} className="shrink-0 text-slate-500" /> Yardım
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
           </div>
         </div>
 
