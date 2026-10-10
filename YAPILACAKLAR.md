@@ -103,4 +103,4 @@ türleri tek tek denendi, sonunda **her şey silindi** — Base44'te hiçbir tes
 
 ## Kullanıcıdan gelen yeni istekler (eklenecek)
 
-- (boş — söylendikçe buraya işlenir)
+- [x] **Otomatik kilit süresi seçilebilsin (kullanıcı isteği: "ekrandan çıkınca hemen şifre istiyor, süreyi kendimiz seçsek").** Gerçek hata bulundu: `page.tsx`'teki "sekme gizlenince kilitle" etkisi `kilitDakika` ayarına **hiç bakmıyordu**, pencere değişince **her zaman anında** kilitleniyordu. Düzeltildi: seçilen süre hem boşta kalma hem pencere değiştirme için geçerli; geri gelindiğinde süre dolmamışsa **kilit açık kalıyor** (kısa bakışta şifre sormaz). Menü genişletildi (Kapalı / 1 / 2 / 3 / 5 / 10 / 15 / 30 dk / 1 / 2 / 4 saat) + "Hızlı: Kapat" düğmesi, açıklamalar ve kilit ekranı metni güncellendi. `kilitDakika = 0` artık hiç kilitlemiyor.

@@ -238,27 +238,37 @@ export function RaporView({ db, setDb, replaceAll, anahtar }: Props & { anahtar:
       <Card>
         <Baslik>🔐 Güvenlik <span className="text-xs font-normal text-slate-400">• otomatik kilit</span></Baslik>
         <div className="flex flex-wrap items-end gap-3">
-          <Alan etiket="Hareketsizlikte kilitle">
+          <Alan etiket="Ne zaman kilitlensin?">
             <select
               className={inp}
               value={String(db.ayarlar.kilitDakika ?? 0)}
               onChange={(e) => setDb((d) => ({ ...d, ayarlar: { ...d.ayarlar, kilitDakika: Number(e.target.value) } }))}
             >
-              <option value="0">Kapalı</option>
-              <option value="1">1 dakika</option>
-              <option value="5">5 dakika</option>
-              <option value="15">15 dakika</option>
-              <option value="30">30 dakika</option>
-              <option value="60">1 saat</option>
+              <option value="0">Kapalı — hiç kilitleme</option>
+              <option value="1">1 dakika sonra</option>
+              <option value="2">2 dakika sonra</option>
+              <option value="3">3 dakika sonra</option>
+              <option value="5">5 dakika sonra</option>
+              <option value="10">10 dakika sonra</option>
+              <option value="15">15 dakika sonra</option>
+              <option value="30">30 dakika sonra</option>
+              <option value="60">1 saat sonra</option>
+              <option value="120">2 saat sonra</option>
+              <option value="240">4 saat sonra</option>
             </select>
           </Alan>
           <Btn kucuk ghost onClick={() => setDb((d) => ({ ...d, ayarlar: { ...d.ayarlar, kilitDakika: 5 } }))}>
             Hızlı: 5 dk
           </Btn>
+          <Btn kucuk ghost onClick={() => setDb((d) => ({ ...d, ayarlar: { ...d.ayarlar, kilitDakika: 0 } }))}>
+            Hızlı: Kapat
+          </Btn>
         </div>
         <p className="mt-2 text-xs text-slate-400">
-          Fare/klavye/dokunma olmazsa veya sekme arka plana alınırsa ekran kilitlenir; tekrar şifrenle açılır.
-          Seçili süre bu bilgisayarda saklanır.
+          Seçtiğin süre <b>iki durumda</b> birden geçerlidir: (1) fare/klavye/dokunma olmazsa
+          hareketsiz kalırsan, (2) başka bir programa geçip uygulamayı <b>o süre kadar bırakırsan</b>.
+          Süre dolmadan geri dönersen kilit açık kalır — yani kısa bir bakış için şifre sormaz.
+          “Kapalı” seçersen hiç kilitlemez. Seçim bu bilgisayarda saklanır.
         </p>
       </Card>
 

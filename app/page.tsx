@@ -294,12 +294,32 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
     };
   }, [db.ayarlar.kilitDakika]);
 
-  // Sekme arka plandaysa kilit (uzaklaşınca görünebilir olmasın)
+  // Pencere arka plana alınınca kilitle — ama AYARDAKİ SÜRE kadar sonra.
+  // Önceden pencere değişince "hemen" kilitleniyordu, seçilen süreye uyulmuyordu.
   useEffect(() => {
-    const gizle = () => { if (document.hidden) setKilitli(true); };
-    document.addEventListener("visibilitychange", gizle);
-    return () => document.removeEventListener("visibilitychange", gizle);
-  }, []);
+    const dakika = Number(db.ayarlar.kilitDakika) || 0;
+    if (dakika <= 0) return; // Kapalı: ne boşta kalınca ne pencere değişince kilitlemez
+    const esik = dakika * 60_000;
+    let gizlenme = 0;
+    const kontrol = () => {
+      if (document.hidden) {
+        if (!gizlenme) gizlenme = Date.now();
+        return;
+      }
+      // geri gelindi: seçilen süre dolmuşsa kilitle
+      if (gizlenme && Date.now() - gizlenme >= esik) setKilitli(true);
+      gizlenme = 0;
+      sonHareketRef.current = Date.now();
+    };
+    document.addEventListener("visibilitychange", kontrol);
+    const id = window.setInterval(() => {
+      if (document.hidden && gizlenme && Date.now() - gizlenme >= esik) setKilitli(true);
+    }, 5_000);
+    return () => {
+      document.removeEventListener("visibilitychange", kontrol);
+      window.clearInterval(id);
+    };
+  }, [db.ayarlar.kilitDakika]);
 
   const kilidiAc = async () => {
     const hata = await giris(eposta, kilitParola);
@@ -432,11 +452,12 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-slate-900/97 px-6 text-white backdrop-blur">
           <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-3xl text-slate-900">🔒</span>
           <h2 className="text-xl font-bold">Ekran kilitlendi</h2>
-          <p className="max-w-[320px] text-center text-sm text-slate-400">
+          <p className="max-w-[340px] text-center text-sm text-slate-400">
             {Number(db.ayarlar.kilitDakika) > 0
-              ? `${db.ayarlar.kilitDakika} dakika hareketsiz kaldın veya sekme gizlendi.`
-              : "Sekme gizlendiği için kilitlendi."}{" "}
-            Devam etmek için şifreni gir.
+              ? `${db.ayarlar.kilitDakika} dakika hareketsiz kaldın veya başka programa geçtin.`
+              : "Ekran kilitlendi."}{" "}
+            Devam etmek için şifreni gir.{" "}
+            <span className="text-slate-500">(Bu süreyi Rapor → Güvenlik'ten değiştirebilirsin)</span>
           </p>
           <form
             className="mt-2 flex w-full max-w-[320px] gap-2"
