@@ -1,0 +1,305 @@
+import { useEffect, useState } from "react";
+
+export type Ledger = {
+  id: string;
+  name: string;
+  color: string;
+  /** Defter notu (Base44: Açıklama) */
+  aciklama?: string;
+  /** Para birimi sembolü (Base44: Para Birimi) */
+  paraBirimi?: string;
+  /** Panelden gizli defter (veriler silinmez, sadece listeden saklanır) */
+  gizli?: boolean;
+};
+export type AccountType = "current" | "savings" | "bank_card" | "credit_card";
+export type Account = {
+  id: string;
+  ledger_id: string;
+  name: string;
+  type: AccountType;
+  open: number;
+  limit: number;
+  ekstre: number;
+  beklenen: number;
+  vadeFark: number;
+  /** Base44: cari hesapta vade / ödeme günü (ayın 1-31'i) */
+  vadeGun?: number;
+  /** Base44: bu hesap Genel Bakış panelinde gösterilmesin */
+  paneldeGizle?: boolean;
+};
+export type TxType = "income" | "expense" | "transfer";
+export type DocType = "yok" | "cek" | "fatura";
+export type Tx = {
+  id: string;
+  ledger_id: string;
+  account_id: string;
+  to_account_id: string;
+  type: TxType;
+  amount: number;
+  date: string;
+  description: string;
+  category: string;
+  doc: DocType;
+  due: string;
+  paid: boolean;
+  /** Taksitli işlem grubu: sıra no / toplam taksit / grup kimliği */
+  taksit?: { no: number; toplam: number; grup: string };
+};
+export type Budget = { id: string; ledger_id: string; month: string; category: string; limit: number };
+export type Goal = { id: string; name: string; target: number; saved: number; date: string };
+export type AltGorev = { id: string; text: string; done: boolean };
+export type Task = {
+  id: string;
+  text: string;
+  prio: "dusuk" | "normal" | "yuksek";
+  done: boolean;
+  aciklama?: string;
+  durum?: "bekliyor" | "devam" | "tamam";
+  altlar?: AltGorev[];
+  /** takvimde gösterilecek son/görev tarihi (YYYY-AA-GG) */
+  tarih?: string;
+};
+export type Plan = { id: string; date: string; text: string; saat: string };
+/** Düzenli gelir/gider şablonu: her ay otomatik uygulanabilir tekrar kayıt */
+export type Sablon = {
+  id: string;
+  ledger_id: string;
+  type: TxType;
+  amount: number;
+  category: string;
+  description: string;
+  account_id: string;
+  gun: number;
+  aktif: boolean;
+  sonUygulama: string;
+};
+export type Habit = { id: string; name: string };
+export type HabitLog = { hid: string; date: string };
+export type Weight = { id: string; date: string; kg: number };
+export type Meal = { id: string; date: string; text: string };
+export type Journal = { id: string; date: string; title: string; text: string; mod: string; enerji: number };
+export type Note = { id: string; title: string; text: string };
+
+export type Db = {
+  ledgers: Ledger[];
+  aktif: string;
+  accounts: Account[];
+  transactions: Tx[];
+  budgets: Budget[];
+  goals: Goal[];
+  tasks: Task[];
+  plans: Plan[];
+  sablonlar: Sablon[];
+  habits: Habit[];
+  habitLogs: HabitLog[];
+  weights: Weight[];
+  meals: Meal[];
+  journal: Journal[];
+  notes: Note[];
+  kiloHedef: { hedef: number; boy: number; tarih: string };
+  ayarlar: Ayarlar;
+};
+
+export type Ayarlar = {
+  tema: string;
+  vurgu: string;
+  moduller: Record<string, boolean>;
+  varsayilanDefter: string;
+  kilitDakika: number;
+  yedekDakika: number;
+  ollamaModel: string;
+  ollamaVision: string;
+  asistanAd: string;
+  /** masaüstü ödeme bildirimleri açık mı */
+  bildirim: boolean;
+  /** ödeme anahtarı → en son bildirildiği gün (aynı uyarı iki kez çınlamaz) */
+  sonBildirim: Record<string, string>;
+};
+
+export const KATEGORILER = ["Diğer", "Market", "Fatura", "Kira", "Maaş", "Ulaşım", "Yemek", "Sağlık", "Eğitim", "Eğlence", "Alışveriş", "Yatırım", "Abonelik", "Transfer"];
+export const VARSAYILAN_AYAR: Ayarlar = {
+  tema: "acik",
+  vurgu: "lacivert",
+  moduller: {},
+  varsayilanDefter: "",
+  kilitDakika: 0,
+  yedekDakika: 2,
+  ollamaModel: "",
+  ollamaVision: "",
+  asistanAd: "Asistan",
+  bildirim: true,
+  sonBildirim: {}
+};
+
+export const HESAP_TIP_AD: Record<AccountType, string> = {
+  current: "Cari / Nakit",
+  savings: "Birikim",
+  bank_card: "Banka",
+  credit_card: "Kredi Kartı"
+};
+
+const KEY = "hp-next-v1";
+
+function seed(): Db {
+  return {
+    ledgers: [
+      { id: "d1", name: "Kişisel Bütçe", color: "#3b82f6" },
+      { id: "d2", name: "Aylık Bütçe Dağılımı", color: "#f59e0b" },
+      { id: "d3", name: "Alacak Takip Defteri", color: "#ef4444" }
+    ],
+    aktif: "d1",
+    ayarlar: {
+      tema: "acik",
+      vurgu: "lacivert",
+      moduller: {},
+      varsayilanDefter: "",
+      kilitDakika: 0,
+      yedekDakika: 2,
+      ollamaModel: "",
+      ollamaVision: "",
+      asistanAd: "Asistan",
+      bildirim: true,
+      sonBildirim: {}
+    },
+    accounts: [
+      { id: "h1", ledger_id: "d1", name: "Nakit", type: "current", open: 0, limit: 0, ekstre: 0, beklenen: 0, vadeFark: 0 },
+      { id: "h2", ledger_id: "d1", name: "Banka", type: "savings", open: 0, limit: 0, ekstre: 0, beklenen: 0, vadeFark: 0 }
+    ],
+    transactions: [],
+    budgets: [],
+    goals: [],
+    tasks: [],
+    sablonlar: [],
+    plans: [],
+    habits: [],
+    habitLogs: [],
+    weights: [],
+    meals: [],
+    journal: [],
+    notes: [],
+    kiloHedef: { hedef: 0, boy: 0, tarih: "" }
+  };
+}
+
+function legacyVeri(): Db | null {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (d && (Array.isArray(d.ledgers) || Array.isArray(d.transactions))) {
+      const t = Array.isArray(d.transactions) ? d.transactions.length : 0;
+      const l = Array.isArray(d.ledgers) ? d.ledgers.length : 0;
+      if (l > 0 || t > 0) return d;
+    }
+  } catch {
+    /* yok say */
+  }
+  return null;
+}
+
+function snapshotOku(anahtar: string): { veri: Db; tarih: string } | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(`hp-otoyedek:${anahtar}`) || "[]");
+    if (Array.isArray(v) && v.length > 0 && v[0].veri && Array.isArray(v[0].veri.ledgers) && v[0].veri.ledgers.length > 0)
+      return { veri: v[0].veri, tarih: v[0].tarih || "" };
+  } catch {
+    /* yok say */
+  }
+  return null;
+}
+
+function tazele(d: Db): Db {
+  const base = seed();
+  return { ...base, ...d, ayarlar: { ...base.ayarlar, ...(d.ayarlar || {}) } };
+}
+
+function load(anahtar: string): { db: Db; not: string | null } {
+  const taze = (d: Db) => tazele(d);
+  let bozukMu = false;
+  try {
+    const raw = localStorage.getItem(anahtar);
+    if (raw) {
+      try {
+        const d = JSON.parse(raw);
+        if (d && Array.isArray(d.ledgers) && d.ledgers.length > 0) return { db: taze(d), not: null };
+        bozukMu = !!raw.trim();
+      } catch {
+        bozukMu = true; // geçersiz JSON
+      }
+      // B4: bozuk ham metni asla atma — kurtarma için ayrı anahtara sakla
+      if (bozukMu) {
+        try {
+          localStorage.setItem(`hp-bozuk:${anahtar}`, raw);
+          localStorage.setItem(`hp-bozuk-zaman:${anahtar}`, new Date().toLocaleString("tr-TR"));
+        } catch { /* alan dolu olabilir */ }
+      }
+    }
+  } catch {
+    bozukMu = true;
+  }
+  const yedek = snapshotOku(anahtar);
+  if (yedek) return { db: taze(yedek.veri), not: `Veri okunamadı → otomatik yedekten geri yüklendi (${yedek.tarih}). Bozuk kopya "hp-bozuk" anahtarında saklandı, hiçbir şey yapman gerekmedi.` };
+  if (anahtar !== KEY) {
+    const eski = legacyVeri();
+    if (eski) {
+      const base = seed();
+      return { db: { ...base, ...eski, ayarlar: { ...base.ayarlar } }, not: null };
+    }
+  }
+  if (bozukMu) return { db: seed(), not: "Veri okunamadı ve yedek bulunamadı → boş başlandı. Bozuk kopya tarayıcıda saklandı (Rapor → Kurtarma bölümünden indirebilirsin)." };
+  return { db: seed(), not: null };
+}
+
+export function useDb(anahtar: string = KEY) {
+  const [ilk] = useState(() => {
+    if (typeof window === "undefined") return { db: seed(), not: null as string | null };
+    return load(anahtar);
+  });
+  const [db, setDbState] = useState<Db>(ilk.db);
+
+  // D2: localStorage boş/bozuksa dosya veritabanından otomatik geri yükleme
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.elektron) return;
+    let gecerli = false;
+    try {
+      const raw = localStorage.getItem(anahtar);
+      const d = raw ? JSON.parse(raw) : null;
+      gecerli = !!(d && Array.isArray(d.ledgers) && d.ledgers.length > 0);
+    } catch {
+      gecerli = false;
+    }
+    if (gecerli) return;
+    window.elektron
+      .veriOku()
+      .then((s) => {
+        if (!s) return;
+        const d = JSON.parse(s);
+        if (d && Array.isArray(d.ledgers) && d.ledgers.length > 0) setDbState(tazele(d));
+      })
+      .catch(() => {});
+  }, [anahtar]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(anahtar, JSON.stringify(db));
+    } catch {
+      /* depolama dolu olabilir */
+    }
+    // D2: masaüstünde veri diske de yazılır (tarayıcı deposu silinse bile kaybolmaz)
+    if (typeof window !== "undefined" && window.elektron) {
+      const s = JSON.stringify(db);
+      window.clearTimeout((window as any).__hpDosyaYaz);
+      (window as any).__hpDosyaYaz = window.setTimeout(() => {
+        window.elektron?.veriYaz(s).catch(() => {});
+      }, 800);
+    }
+  }, [db, anahtar]);
+
+  const setDb = (updater: (d: Db) => Db) => {
+    setDbState((prev) => updater(structuredClone(prev)));
+  };
+
+  const replaceAll = (next: Db) => setDbState(next);
+
+  return { db, setDb, replaceAll, kurtarma: ilk.not };
+}

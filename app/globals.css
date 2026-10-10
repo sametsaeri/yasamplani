@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-100 text-slate-900 antialiased;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+::selection {
+  background: #0f172a;
+  color: #fff;
+}
+/* üst menüdeki yatay kaydırma çubuğunu gizle (fare tekerleği kaydırmayı engellemez) */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+@keyframes fadeYukari {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes cubukBuyume {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes sutunBuyume {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@keyframes cizgiCek {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.anim-giris > * {
+  animation: fadeYukari 0.35s ease both;
+}
+.anim-giris > *:nth-child(2) {
+  animation-delay: 0.05s;
+}
+.anim-giris > *:nth-child(3) {
+  animation-delay: 0.1s;
+}
+.anim-giris > *:nth-child(4) {
+  animation-delay: 0.15s;
+}
+.anim-giris > *:nth-child(n + 5) {
+  animation-delay: 0.2s;
+}
+.cubuk-anim {
+  transform-origin: left;
+  animation: cubukBuyume 0.6s ease both;
+}
+.sutun-anim {
+  transform-origin: bottom;
+  animation: sutunBuyume 0.6s ease both;
+}
+.cizgi-anim {
+  stroke-dasharray: 3000;
+  stroke-dashoffset: 3000;
+  animation: cizgiCek 1.2s ease forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .anim-giris > *,
+  .cubuk-anim,
+  .sutun-anim,
+  .cizgi-anim,
+  .pil-dolum {
+    animation: none !important;
+  }
+}
+.pil-dolum {
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: pilDol 0.9s ease both;
+}
+@keyframes pilDol {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media print {
+  aside,
+  header,
+  nav,
+  .no-print {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+  body {
+    background: #fff;
+  }
+}

@@ -1,0 +1,700 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import type { Db, Task } from "../lib/store";
+import { bugun, para, trh, uid } from "../lib/format";
+import { kalanEtiket, yaklasanOdemeler } from "../lib/hatirlatici";
+import { Alan, Baslik, Bos, Btn, Card, SilBtn, inp } from "./ui";
+
+type Props = { db: Db; setDb: (u: (d: Db) => Db) => void };
+const AY_AD = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+const GUN_AD = ["Pt", "Sa", "Ça", "Pe", "Cu", "Ct", "Pz"];
+
+export function ZamanView({ db, setDb }: Props) {
+  const simdi = new Date();
+  const [yil, setYil] = useState(simdi.getFullYear());
+  const [ay, setAy] = useState(simdi.getMonth());
+  const [secili, setSecili] = useState(bugun());
+  // F5/Yenile'de seçili sekme korunur
+  const [mod, setMod] = useState<"gunluk" | "saatlik" | "haftalik" | "aylik" | "takvim">(() => {
+    if (typeof window === "undefined") return "gunluk";
+    let v: string | null = null;
+    try { v = sessionStorage.getItem("hp-zaman-sekme"); } catch { /* yoksay */ }
+    return v === "gunluk" || v === "saatlik" || v === "haftalik" || v === "aylik" || v === "takvim" ? v : "gunluk";
+  });
+  useEffect(() => {
+    try { sessionStorage.setItem("hp-zaman-sekme", mod); } catch { /* yoksay */ }
+  }, [mod]);
+  const [metin, setMetin] = useState("");
+  const [saat, setSaat] = useState("");
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const isoYerel = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const ilk = new Date(yil, ay, 1);
+  const bas = (ilk.getDay() + 6) % 7;
+  const gunSay = new Date(yil, ay + 1, 0).getDate();
+  const planSay = (t: string) => db.plans.filter((p) => p.date === t).length;
+  const gunPlan = db.plans.filter((p) => p.date === secili);
+  const gunBoyu = gunPlan.filter((p) => !p.saat);
+
+  const ekle = (tarih?: string, saatDeger?: string) => {
+    if (!metin.trim()) return alert("Plan yaz.");
+    const t = tarih || secili;
+    setDb((d) => ({ ...d, plans: [...d.plans, { id: uid(), date: t, text: metin.trim(), saat: saatDeger ?? saat }] }));
+    setMetin("");
+  };
+
+  const silPlan = (id: string) => setDb((d) => ({ ...d, plans: d.plans.filter((x) => x.id !== id) }));
+
+  const SAATLER = Array.from({ length: 18 }).map((_, i) => pad(i + 6));
+  const saatlik: Record<string, typeof db.plans> = {};
+  SAATLER.forEach((h) => { saatlik[h] = gunPlan.filter((p) => (p.saat || "").slice(0, 2) === h); });
+
+  const haftaBas = new Date(secili + "T12:00:00");
+  haftaBas.setDate(haftaBas.getDate() - ((haftaBas.getDay() + 6) % 7));
+  const haft = Array.from({ length: 7 }).map((_, i) => {
+    const d = new Date(haftaBas);
+    d.setDate(haftaBas.getDate() + i);
+    return isoYerel(d);
+  });
+  const gunlere: Record<string, typeof db.plans> = {};
+  haft.forEach((t) => { gunlere[t] = db.plans.filter((p) => p.date === t); });
+  const haftaKaydir = (n: number) => {
+    const d = new Date(secili + "T12:00:00");
+    d.setDate(d.getDate() + n);
+    setSecili(isoYerel(d));
+  };
+
+  const ayListesi: [string, number][] = [];
+  for (let g = 1; g <= new Date(yil, ay + 1, 0).getDate(); g++) {
+    const t = `${yil}-${pad(ay + 1)}-${pad(g)}`;
+    const n = planSay(t);
+    if (n > 0) ayListesi.push([t, n]);
+  }
+  ayListesi.sort((a, c) => c[1] - a[1]);
+  const ayTop = ayListesi.reduce((s, x) => s + x[1], 0);
+  const enCok = ayListesi.length ? ayListesi[0][1] : 1;
+  const ayIleri = () => { if (ay + 1 > 11) { setAy(0); setYil(yil + 1); } else setAy(ay + 1); };
+  const ayGeri = () => { if (ay - 1 < 0) { setAy(11); setYil(yil - 1); } else setAy(ay - 1); };
+
+  const hucreler: React.ReactNode[] = [];
+  for (let i = 0; i < bas; i++) hucreler.push(<div key={`b${i}`} />);
+  for (let g = 1; g <= gunSay; g++) {
+    const t = `${yil}-${pad(ay + 1)}-${pad(g)}`;
+    const s = planSay(t);
+    hucreler.push(
+      <button
+        key={t}
+        onClick={() => setSecili(t)}
+        className={`min-h-[56px] rounded-lg border p-1 text-left text-xs transition ${
+          t === bugun() ? "bg-slate-900 text-white" : secili === t ? "border-slate-900 outline outline-2 outline-slate-900" : "border-slate-200 bg-slate-50 hover:border-slate-900"
+        }`}
+      >
+        <b>{g}</b>
+        {s > 0 && (
+          <div className="mt-1 flex gap-0.5">
+            {Array.from({ length: Math.min(s, 4) }).map((_, i) => (
+              <span key={i} className={`h-1.5 w-1.5 rounded-full ${t === bugun() ? "bg-white" : "bg-blue-600"}`} />
+            ))}
+          </div>
+        )}
+      </button>
+    );
+  }
+
+  // 🗓 Takvim modu: plan + görev + ödeme + kilo + günlük aynı ızgarada
+  const ayTakvim = `${yil}-${pad(ay + 1)}`;
+  const takvimOdemeler = yaklasanOdemeler(db, 200, 200).filter((o) => o.tarih.startsWith(ayTakvim));
+  const takvimSay = (t: string) => ({
+    plan: db.plans.filter((p) => p.date === t).length,
+    gorev: db.tasks.filter((g) => g.tarih === t && !g.done).length,
+    odeme: takvimOdemeler.filter((o) => o.tarih === t).length,
+    kilo: db.weights.filter((w) => w.date === t).length,
+    gunluk: db.journal.filter((j) => j.date === t).length
+  });
+  const takvimHucreleri: React.ReactNode[] = [];
+  for (let i = 0; i < bas; i++) takvimHucreleri.push(<div key={`tb${i}`} />);
+  for (let g = 1; g <= gunSay; g++) {
+    const t = `${ayTakvim}-${pad(g)}`;
+    const s = takvimSay(t);
+    const toplam = s.plan + s.gorev + s.odeme + s.kilo + s.gunluk;
+    const bugunMu = t === bugun();
+    takvimHucreleri.push(
+      <button
+        key={t}
+        onClick={() => setSecili(t)}
+        className={`min-h-[74px] rounded-lg border p-1 text-left transition ${
+          bugunMu
+            ? "border-slate-900 bg-slate-900 text-white"
+            : secili === t
+              ? "border-slate-900 bg-white outline outline-2 outline-slate-900"
+              : "border-slate-200 bg-slate-50 hover:border-slate-900"
+        }`}
+      >
+        <div className="flex items-center justify-between">
+          <b className="text-xs">{g}</b>
+          {toplam > 0 && <span className={`text-[10px] ${bugunMu ? "text-slate-300" : "text-slate-400"}`}>{toplam}</span>}
+        </div>
+        <div className="mt-1 flex flex-wrap gap-0.5 text-[11px] leading-none">
+          {s.plan > 0 && <span title={`${s.plan} plan`}>📅</span>}
+          {s.gorev > 0 && <span title={`${s.gorev} görev`}>✅</span>}
+          {s.odeme > 0 && <span title={`${s.odeme} ödeme`}>💰</span>}
+          {s.kilo > 0 && <span title={`${s.kilo} kilo kaydı`}>⚖️</span>}
+          {s.gunluk > 0 && <span title={`${s.gunluk} günlük`}>📓</span>}
+        </div>
+      </button>
+    );
+  }
+  const seciliSay = takvimSay(secili);
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap gap-2">
+        {(["gunluk", "saatlik", "haftalik", "aylik", "takvim"] as const).map((m) => (
+          <Btn key={m} kucuk ghost={mod !== m} onClick={() => setMod(m)}>
+            {m === "gunluk" ? "📅 Günlük" : m === "saatlik" ? "⏰ Saatlik" : m === "haftalik" ? "🗓 Haftalık" : m === "aylik" ? "📊 Aylık" : "🗓 Takvim"}
+          </Btn>
+        ))}
+      </div>
+
+      {mod === "gunluk" && (
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
+      <Card className="lg:col-span-3">
+        <div className="mb-2 flex items-center justify-between">
+          <Btn kucuk ghost onClick={() => { const a = ay - 1; if (a < 0) { setAy(11); setYil(yil - 1); } else setAy(a); }}>
+            <ChevronLeft size={15} />
+          </Btn>
+          <b>{AY_AD[ay]} {yil}</b>
+          <div className="flex gap-1">
+            <Btn kucuk ghost onClick={() => { const n = new Date(); setYil(n.getFullYear()); setAy(n.getMonth()); setSecili(bugun()); }}>Bugün</Btn>
+            <Btn kucuk ghost onClick={() => { const a = ay + 1; if (a > 11) { setAy(0); setYil(yil + 1); } else setAy(a); }}>
+              <ChevronRight size={15} />
+            </Btn>
+          </div>
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {GUN_AD.map((g) => <div key={g} className="py-1 text-center text-[11px] text-slate-400">{g}</div>)}
+          {hucreler}
+        </div>
+      </Card>
+      <Card className="lg:col-span-2">
+        <Baslik>{trh(secili)} Planları</Baslik>
+        <div className="grid grid-cols-[110px_1fr_auto] gap-2">
+          <input type="time" className={inp} value={saat} onChange={(e) => setSaat(e.target.value)} title="Saat (boş bırakılabilir)" />
+          <input className={inp} value={metin} onChange={(e) => setMetin(e.target.value)} placeholder="örn: 10:00 Doktor"
+            onKeyDown={(e) => { if (e.key === "Enter") ekle(); }} />
+          <Btn onClick={() => ekle()}><Plus size={15} /></Btn>
+        </div>
+        <div className="mt-2">
+          {gunPlan.length === 0 ? <Bos yazi="Bu gün plan yok." /> : gunPlan.map((p) => (
+            <div key={p.id} className="flex items-center justify-between border-b border-slate-100 py-2 text-sm">
+              <span>{p.saat ? <b>{p.saat} </b> : ""}{p.text}</span>
+              <SilBtn onClick={() => silPlan(p.id)} />
+            </div>
+          ))}
+        </div>
+      </Card>
+      </div>
+      )}
+
+      {mod === "saatlik" && (
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <Card>
+          <Baslik>Saatlik Plan</Baslik>
+          <Alan etiket="Gün"><input type="date" className={inp} value={secili} onChange={(e) => setSecili(e.target.value)} /></Alan>
+          <div className="mt-2 grid grid-cols-[110px_1fr_auto] gap-2">
+            <input type="time" className={inp} value={saat} onChange={(e) => setSaat(e.target.value)} />
+            <input className={inp} value={metin} onChange={(e) => setMetin(e.target.value)} placeholder="Plan..."
+              onKeyDown={(e) => { if (e.key === "Enter") ekle(); }} />
+            <Btn onClick={() => ekle()}><Plus size={15} /></Btn>
+          </div>
+          <div className="mt-3">
+            <b className="text-[13px]">Gün boyu</b>
+            {gunBoyu.length === 0 ? <div className="text-xs text-slate-400">Yok.</div> : gunBoyu.map((p) => (
+              <div key={p.id} className="flex items-center justify-between border-b border-slate-100 py-1.5 text-[13px]">
+                <span>{p.text}</span>
+                <SilBtn onClick={() => silPlan(p.id)} />
+              </div>
+            ))}
+          </div>
+        </Card>
+        <Card className="lg:col-span-2">
+          <Baslik>{trh(secili)} • Saat saat</Baslik>
+          {SAATLER.map((h) => (
+            <div key={h} className="flex items-start gap-2 border-b border-slate-100 py-1.5 text-sm">
+              <span className="w-12 shrink-0 pt-1 font-semibold text-slate-500">{h}:00</span>
+              <div className="flex-1 space-y-1">
+                {saatlik[h].length === 0 ? <span className="text-xs text-slate-300">—</span> : saatlik[h].map((p) => (
+                  <div key={p.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-2 py-1 text-[13px]">
+                    <span><b>{p.saat}</b> {p.text}</span>
+                    <SilBtn onClick={() => silPlan(p.id)} />
+                  </div>
+                ))}
+              </div>
+              <button className="shrink-0 pt-1 text-xs text-blue-600 hover:underline" onClick={() => setSaat(h + ":00")}>+ Ekle</button>
+            </div>
+          ))}
+        </Card>
+      </div>
+      )}
+
+      {mod === "haftalik" && (
+      <Card>
+        <div className="mb-2 flex items-center justify-between">
+          <Btn kucuk ghost onClick={() => haftaKaydir(-7)}>←</Btn>
+          <b>{trh(haft[0])} – {trh(haft[6])}</b>
+          <Btn kucuk ghost onClick={() => haftaKaydir(7)}>→</Btn>
+        </div>
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-7">
+          {haft.map((t, i) => (
+            <div key={t} className={`rounded-xl border p-2 ${t === secili ? "border-slate-900 outline outline-1 outline-slate-900" : "border-slate-200"}`}>
+              <button className="w-full text-left" onClick={() => setSecili(t)}>
+                <div className="text-[11px] text-slate-400">{GUN_AD[i]}</div>
+                <b className="text-sm">{t.slice(8)}.{t.slice(5, 7)}</b>
+              </button>
+              <div className="mt-1 space-y-1">
+                {(gunlere[t] || []).length === 0 ? <div className="text-[11px] text-slate-300">—</div> :
+                  (gunlere[t] || []).map((p) => (
+                    <div key={p.id} className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px]">{p.saat ? <b>{p.saat} </b> : ""}{p.text}</div>
+                  ))}
+              </div>
+              <button className="mt-1 text-[11px] text-blue-600 hover:underline" onClick={() => { setSecili(t); setMod("gunluk"); }}>Aç →</button>
+            </div>
+          ))}
+        </div>
+      </Card>
+      )}
+
+      {mod === "aylik" && (
+      <Card>
+        <div className="mb-2 flex items-center justify-between">
+          <Btn kucuk ghost onClick={ayGeri}>←</Btn>
+          <b>{AY_AD[ay]} {yil} Özeti</b>
+          <Btn kucuk ghost onClick={ayIleri}>→</Btn>
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-xl bg-slate-50 p-3"><div className="text-xl font-bold">{ayTop}</div><div className="text-xs text-slate-500">Toplam plan</div></div>
+          <div className="rounded-xl bg-slate-50 p-3"><div className="text-xl font-bold">{ayListesi.length}</div><div className="text-xs text-slate-500">Planlı gün</div></div>
+          <div className="rounded-xl bg-slate-50 p-3"><div className="text-base font-bold">{ayListesi.length ? trh(ayListesi[0][0]) : "—"}</div><div className="text-xs text-slate-500">En yoğun gün</div></div>
+        </div>
+        <div className="mt-2">
+          {ayListesi.length === 0 ? <Bos yazi="Bu ay plan yok." /> : ayListesi.map(([t, n]) => (
+            <div key={t} className="flex items-center gap-2 border-b border-slate-100 py-1.5 text-sm">
+              <span className="w-24 shrink-0">{trh(t)}</span>
+              <div className="h-2 flex-1 overflow-hidden rounded bg-slate-100">
+                <div className="h-full bg-slate-900" style={{ width: `${Math.round((n / enCok) * 100)}%` }} />
+              </div>
+              <b className="w-6 text-right">{n}</b>
+              <button className="shrink-0 text-xs text-blue-600 hover:underline" onClick={() => { setSecili(t); setMod("gunluk"); }}>Aç →</button>
+            </div>
+          ))}
+        </div>
+      </Card>
+      )}
+
+      {mod === "takvim" && (
+      <Card>
+        <div className="mb-2 flex items-center justify-between">
+          <Btn kucuk ghost onClick={ayGeri}>←</Btn>
+          <b>{AY_AD[ay]} {yil} Takvimi</b>
+          <div className="flex gap-1">
+            <Btn kucuk ghost onClick={() => { const n = new Date(); setYil(n.getFullYear()); setAy(n.getMonth()); setSecili(bugun()); }}>Bugün</Btn>
+            <Btn kucuk ghost onClick={ayIleri}>→</Btn>
+          </div>
+        </div>
+        <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+          <span>📅 Plan</span>
+          <span>✅ Görev</span>
+          <span>💰 Ödeme</span>
+          <span>⚖️ Kilo</span>
+          <span>📓 Günlük</span>
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {GUN_AD.map((g) => (
+            <div key={g} className="pb-1 text-center text-[11px] font-medium text-slate-400">{g}</div>
+          ))}
+          {takvimHucreleri}
+        </div>
+        <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div className="mb-1.5 flex items-center justify-between">
+            <b className="text-sm">🗓 {trh(secili)}</b>
+            <Btn kucuk ghost onClick={() => setMod("gunluk")}>Gün detayı →</Btn>
+          </div>
+          {!seciliSay.plan && !seciliSay.gorev && !seciliSay.odeme && !seciliSay.kilo && !seciliSay.gunluk ? (
+            <div className="text-sm text-slate-400">Bu gün için kayıt yok. Günlük sekmesinden plan ekleyebilirsin.</div>
+          ) : (
+            <div className="space-y-1 text-[13px]">
+              {db.plans.filter((p) => p.date === secili).map((p) => (
+                <div key={`tp${p.id}`}>📅 {p.saat ? <b>{p.saat} </b> : null}{p.text}</div>
+              ))}
+              {db.tasks.filter((g) => g.tarih === secili).map((g) => (
+                <div key={`tg${g.id}`}>✅ {g.done ? <s className="text-slate-400">{g.text}</s> : g.text}</div>
+              ))}
+              {takvimOdemeler.filter((o) => o.tarih === secili).map((o) => (
+                <div key={o.anahtar}>
+                  💰 {o.baslik} — <b>{o.tutar ? para(o.tutar) : "—"}</b>{" "}
+                  <span className={o.kalanGun <= 0 ? "font-semibold text-red-500" : "text-slate-400"}>
+                    {kalanEtiket(o.kalanGun)}
+                  </span>
+                </div>
+              ))}
+              {db.weights.filter((w) => w.date === secili).map((w) => (<div key={w.id}>⚖️ {w.kg} kg</div>))}
+              {db.journal.filter((j) => j.date === secili).map((j) => (
+                <div key={j.id}>📓 {j.title || j.text.slice(0, 50)}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Card>
+      )}
+    </div>
+  );
+}
+
+export function GorevView({ db, setDb }: Props) {
+  const [metin, setMetin] = useState("");
+  const [oncelik, setOncelik] = useState<"dusuk" | "normal" | "yuksek">("normal");
+  const [tarih, setTarih] = useState("");
+  const [filtre, setFiltre] = useState<"tumu" | "acik" | "biten">("tumu");
+  const [acik, setAcik] = useState<string | null>(null);
+  const [altMetin, setAltMetin] = useState("");
+
+  const guncelle = (id: string, yama: Partial<Task>) =>
+    setDb((d) => ({ ...d, tasks: d.tasks.map((x) => (x.id === id ? { ...x, ...yama } : x)) }));
+
+  const ilerleme = (t: Task): number => {
+    if (t.altlar && t.altlar.length > 0) {
+      const biten = t.altlar.filter((a) => a.done).length;
+      return Math.round((biten / t.altlar.length) * 100);
+    }
+    return t.done ? 100 : 0;
+  };
+
+  const ekle = () => {
+    if (!metin.trim()) return;
+    setDb((d) => ({ ...d, tasks: [...d.tasks, { id: uid(), text: metin.trim(), prio: oncelik, done: false, aciklama: "", durum: "bekliyor", altlar: [], tarih: tarih || undefined }] }));
+    setMetin("");
+    setTarih("");
+  };
+
+  let liste = [...db.tasks].sort((a, c) => Number(a.done) - Number(c.done));
+  if (filtre === "acik") liste = liste.filter((t) => !t.done);
+  if (filtre === "biten") liste = liste.filter((t) => t.done);
+  const bekleyen = db.tasks.filter((t) => !t.done).length;
+  const detay = db.tasks.find((t) => t.id === acik) || null;
+  const durumRengi: Record<string, string> = { bekliyor: "bg-slate-100 text-slate-600", devam: "bg-amber-100 text-amber-700", tamam: "bg-emerald-100 text-emerald-700" };
+
+  return (
+    <Card>
+      <Baslik sag={<span className="text-xs font-normal text-slate-400">{bekleyen} bekleyen</span>}>Görevler</Baslik>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_150px_150px_auto]">
+        <Alan etiket="Yeni görev">
+          <input className={inp} value={metin} onChange={(e) => setMetin(e.target.value)} placeholder="örn: Faturaları öde"
+            onKeyDown={(e) => { if (e.key === "Enter") ekle(); }} />
+        </Alan>
+        <Alan etiket="Tarih (takvim)">
+          <input type="date" className={inp} value={tarih} onChange={(e) => setTarih(e.target.value)} />
+        </Alan>
+        <Alan etiket="Öncelik">
+          <select className={inp} value={oncelik} onChange={(e) => setOncelik(e.target.value as typeof oncelik)}>
+            <option value="dusuk">🟢 Düşük</option><option value="normal">Normal</option><option value="yuksek">🔴 Yüksek</option>
+          </select>
+        </Alan>
+        <div className="flex items-end"><Btn onClick={ekle}><Plus size={15} className="mr-1 inline" /> Ekle</Btn></div>
+      </div>
+      <div className="my-3 flex gap-2">
+        {(["tumu", "acik", "biten"] as const).map((f) => (
+          <Btn key={f} kucuk ghost={! (filtre === f)} onClick={() => setFiltre(f)}>
+            {f === "tumu" ? "Tümü" : f === "acik" ? "Açık" : "Biten"}
+          </Btn>
+        ))}
+      </div>
+      {liste.length === 0 ? <Bos yazi="Görev yok." /> : liste.map((t) => {
+        const yz = ilerleme(t);
+        return (
+        <div key={t.id} className={`border-b border-slate-100 py-2.5 text-sm ${t.done ? "text-slate-400" : ""}`}>
+          <div className="flex items-center gap-2.5">
+            <input
+              type="checkbox" className="h-[18px] w-[18px]" checked={t.done}
+              onChange={() => guncelle(t.id, { done: !t.done, durum: !t.done ? "tamam" : "bekliyor" })}
+            />
+            <button className="min-w-0 flex-1 text-left" onClick={() => setAcik(acik === t.id ? null : t.id)}>
+              <span className={`block truncate ${t.done ? "line-through" : ""}`}>
+                {t.text}{t.prio === "yuksek" ? " 🔴" : t.prio === "dusuk" ? " 🟢" : ""}
+              </span>
+              {t.tarih && (
+                <span className={`mt-0.5 block text-[11px] ${!t.done && t.tarih < bugun() ? "font-semibold text-red-500" : "text-slate-400"}`}>
+                  📅 {trh(t.tarih)}{!t.done && t.tarih < bugun() ? " • gecikti" : ""}
+                </span>
+              )}
+              {yz > 0 && !t.done ? (
+                <span className="mt-1 flex items-center gap-1.5">
+                  <span className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100">
+                    <span className="block h-full rounded-full bg-blue-500 transition-all" style={{ width: `${yz}%` }} />
+                  </span>
+                  <span className="text-[10px] text-slate-400">%{yz}</span>
+                </span>
+              ) : null}
+            </button>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${durumRengi[t.durum || "bekliyor"]}`}>
+              {t.durum === "devam" ? "Devam" : t.durum === "tamam" ? "Tamam" : "Bekliyor"}
+            </span>
+            <SilBtn onClick={() => setDb((d) => ({ ...d, tasks: d.tasks.filter((x) => x.id !== t.id) }))} />
+          </div>
+          {acik === t.id ? (
+            <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <span className="mb-1 block text-xs font-medium text-slate-500">Açıklama</span>
+              <textarea className={`${inp} min-h-[60px] bg-white`} value={t.aciklama || ""} placeholder="Görevle ilgili notlar…"
+                onChange={(e) => guncelle(t.id, { aciklama: e.target.value })} />
+              <span className="mb-1 mt-3 block text-xs font-medium text-slate-500">Tarih (takvim)</span>
+              <input
+                type="date" className={inp} value={t.tarih || ""}
+                onChange={(e) => guncelle(t.id, { tarih: e.target.value || undefined })}
+              />
+              <span className="mb-1 mt-3 block text-xs font-medium text-slate-500">Durum</span>
+              <div className="flex gap-1.5">
+                {(["bekliyor", "devam", "tamam"] as const).map((s) => (
+                  <Btn key={s} kucuk ghost={t.durum !== s} onClick={() => guncelle(t.id, { durum: s, done: s === "tamam" ? true : t.done })}>
+                    {s === "bekliyor" ? "⏳ Bekliyor" : s === "devam" ? "🏃 Devam" : "✅ Tamam"}
+                  </Btn>
+                ))}
+              </div>
+              <span className="mb-1 mt-3 block text-xs font-medium text-slate-500">
+                Alt görevler {t.altlar && t.altlar.length > 0 ? `(${t.altlar.filter((a) => a.done).length}/${t.altlar.length} • %${yz})` : ""}
+              </span>
+              {(t.altlar || []).map((a) => (
+                <label key={a.id} className="flex items-center gap-2 py-0.5 text-sm">
+                  <input type="checkbox" className="h-4 w-4" checked={a.done}
+                    onChange={() => guncelle(t.id, { altlar: (t.altlar || []).map((x) => (x.id === a.id ? { ...x, done: !x.done } : x)) })} />
+                  <span className={a.done ? "text-slate-400 line-through" : ""}>{a.text}</span>
+                  <button className="ml-auto text-slate-300 hover:text-red-500" title="Alt görevi sil"
+                    onClick={() => guncelle(t.id, { altlar: (t.altlar || []).filter((x) => x.id !== a.id) })}>✕</button>
+                </label>
+              ))}
+              <div className="mt-2 flex gap-2">
+                <input className={inp} value={altMetin} placeholder="Yeni alt görev…" 
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" || !altMetin.trim()) return;
+                    guncelle(t.id, { altlar: [...(t.altlar || []), { id: uid(), text: altMetin.trim(), done: false }] });
+                    setAltMetin("");
+                  }}
+                  onChange={(e) => setAltMetin(e.target.value)} />
+                <Btn kucuk onClick={() => {
+                  if (!altMetin.trim()) return;
+                  guncelle(t.id, { altlar: [...(t.altlar || []), { id: uid(), text: altMetin.trim(), done: false }] });
+                  setAltMetin("");
+                }}>Ekle</Btn>
+              </div>
+            </div>
+          ) : null}
+        </div>
+        );
+      })}
+    </Card>
+  );
+}
+
+export function KiloView({ db, setDb }: Props) {
+  const [tarih, setTarih] = useState(bugun());
+  const [kg, setKg] = useState("");
+  const [ogun, setOgun] = useState("");
+
+  const sirali = useMemo(() => [...db.weights].sort((a, c) => (a.date < c.date ? -1 : 1)), [db.weights]);
+
+  const kaydet = () => {
+    const n = Number(kg.replace(",", "."));
+    if (!(n > 0)) return alert("Kilo gir.");
+    setDb((d) => ({ ...d, weights: [...d.weights, { id: uid(), date: tarih || bugun(), kg: n }] }));
+    setKg("");
+  };
+
+  const ogunEkle = () => {
+    if (!ogun.trim()) return;
+    setDb((d) => ({ ...d, meals: [...d.meals, { id: uid(), date: bugun(), text: ogun.trim() }] }));
+    setOgun("");
+  };
+
+  const W = 560, H = 180, P = 30;
+  let grafik: React.ReactNode = <Bos yazi="Grafik için en az 2 kayıt gerekli." />;
+  if (sirali.length >= 2) {
+    const v = sirali.map((k) => k.kg);
+    const mn = Math.min(...v) - 1, mx = Math.max(...v) + 1;
+    const X = (i: number) => P + (i * (W - 2 * P)) / Math.max(v.length - 1, 1);
+    const Y = (x: number) => H - P - ((x - mn) * (H - 2 * P)) / Math.max(mx - mn, 0.01);
+    const pts = v.map((x, i) => `${X(i).toFixed(1)},${Y(x).toFixed(1)}`).join(" ");
+    const fark = (v[v.length - 1] - v[0]).toFixed(1);
+    grafik = (
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full">
+        <polygon points={`${P},${H - P} ${pts} ${W - P},${H - P}`} fill="#2563eb" opacity="0.08" />
+        <polyline points={pts} fill="none" stroke="#2563eb" strokeWidth={2} className="cizgi-anim" />
+        {v.map((x, i) => (
+          <circle key={i} cx={X(i)} cy={Y(x)} r={4} fill="#2563eb">
+            <title>{sirali[i].kg} kg • {trh(sirali[i].date)}</title>
+          </circle>
+        ))}
+        <text x={P} y={14} fontSize={12} fill="#64748b">Değişim: {Number(fark) > 0 ? "+" : ""}{fark} kg</text>
+      </svg>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <Card><Baslik>Kilo Grafiği</Baslik>{grafik}</Card>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <Card>
+          <Baslik>Kilo Takibi</Baslik>
+          <div className="grid grid-cols-2 gap-2">
+            <Alan etiket="Tarih"><input type="date" className={inp} value={tarih} onChange={(e) => setTarih(e.target.value)} /></Alan>
+            <Alan etiket="Kilo (kg)"><input className={inp} value={kg} onChange={(e) => setKg(e.target.value)} placeholder="103,4" /></Alan>
+          </div>
+          <div className="mt-2"><Btn kucuk onClick={kaydet}>Kaydet</Btn></div>
+          <div className="mt-2">
+            {sirali.length === 0 ? <Bos yazi="Kayıt yok." /> : (
+              <table className="w-full text-[13px]">
+                <thead><tr className="text-left text-slate-500"><th className="p-2">Tarih</th><th className="p-2">Kilo</th><th className="p-2"></th></tr></thead>
+                <tbody>
+                  {[...sirali].reverse().slice(0, 20).map((k) => (
+                    <tr key={k.id} className="border-t border-slate-100">
+                      <td className="p-2">{trh(k.date)}</td><td className="p-2 font-bold">{k.kg} kg</td>
+                      <td className="p-2"><SilBtn onClick={() => setDb((d) => ({ ...d, weights: d.weights.filter((x) => x.id !== k.id) }))} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </Card>
+        <Card>
+          <Baslik>Günlük Not / Öğün</Baslik>
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <input className={inp} value={ogun} onChange={(e) => setOgun(e.target.value)} placeholder="örn: Öğle 700 kcal"
+              onKeyDown={(e) => { if (e.key === "Enter") ogunEkle(); }} />
+            <Btn onClick={ogunEkle}>Ekle</Btn>
+          </div>
+          <div className="mt-2">
+            {db.meals.length === 0 ? <Bos yazi="Öğün yok." /> : [...db.meals].reverse().slice(0, 10).map((m) => (
+              <div key={m.id} className="flex items-center justify-between border-b border-slate-100 py-1.5 text-[13px]">
+                <span>{m.text} <span className="text-[11px] text-slate-400">{trh(m.date)}</span></span>
+                <SilBtn onClick={() => setDb((d) => ({ ...d, meals: d.meals.filter((x) => x.id !== m.id) }))} />
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+      <p className="text-[11px] text-slate-400">Kalori girişleri senin tahminindir; tıbbi bilgi değildir. Sağlık verilerin bu cihazdan çıkmaz.</p>
+    </div>
+  );
+}
+
+export function GunlukView({ db, setDb }: Props) {
+  const [tarih, setTarih] = useState(bugun());
+  const [baslik, setBaslik] = useState("");
+  const [metin, setMetin] = useState("");
+  const [mod, setMod] = useState("");
+  const [enerji, setEnerji] = useState(3);
+  const [ara, setAra] = useState("");
+
+  const kaydet = () => {
+    if (!metin.trim()) return alert("Yazı gir.");
+    setDb((d) => ({ ...d, journal: [...d.journal, { id: uid(), date: tarih || bugun(), title: baslik || "Günlük", text: metin.trim(), mod, enerji }] }));
+    setMetin(""); setBaslik(""); setMod(""); setEnerji(3);
+  };
+
+  const a = ara.toLocaleLowerCase("tr");
+  const liste = [...db.journal].reverse().filter((j) => !a || ((j.title + " " + j.text).toLocaleLowerCase("tr").includes(a)));
+
+  return (
+    <Card>
+      <Baslik>Yeni Kayıt</Baslik>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <Alan etiket="Tarih"><input type="date" className={inp} value={tarih} onChange={(e) => setTarih(e.target.value)} /></Alan>
+        <Alan etiket="Başlık"><input className={inp} value={baslik} onChange={(e) => setBaslik(e.target.value)} placeholder="örn: İş" /></Alan>
+        <div className="sm:col-span-2">
+          <span className="mb-1 block text-xs text-slate-500">Ruh hali (isteğe bağlı)</span>
+          <div className="flex flex-wrap gap-1">
+            {[["", "Yok"], ["😄", "Çok iyi"], ["🙂", "İyi"], ["😐", "Normal"], ["😟", "Kötü"], ["😢", "Çok kötü"]].map(([v, t]) => (
+              <button key={t} type="button" title={t} onClick={() => setMod(v)}
+                className={`rounded-lg border px-2 py-1 text-lg ${mod === v ? "border-slate-900 bg-slate-900" : "border-slate-200 bg-white"}`}>
+                {v || "—"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="sm:col-span-2">
+          <span className="mb-1 block text-xs text-slate-500">Enerji seviyesi (1–5)</span>
+          <div className="flex items-center gap-1">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} type="button" onClick={() => setEnerji(n)}
+                className={`h-7 w-7 rounded-lg border text-xs font-bold transition ${enerji === n ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-500 hover:border-slate-400"}`}>
+                {n}
+              </button>
+            ))}
+            <span className="ml-2 text-xs text-slate-400">{["🛌", "😮‍💨", "😐", "🙂", "⚡"][enerji - 1]}</span>
+          </div>
+        </div>
+        <div className="sm:col-span-2"><Alan etiket="Yazı"><textarea className={`${inp} min-h-[90px]`} value={metin} onChange={(e) => setMetin(e.target.value)} /></Alan></div>
+      </div>
+      <div className="mt-2"><Btn kucuk onClick={kaydet}>Kaydet</Btn></div>
+      {(() => {
+        const son = [...db.journal].sort((a, c) => (a.date < c.date ? -1 : 1)).slice(0, 7);
+        if (son.length === 0) return null;
+        return (
+          <div className="mb-1 mt-2 flex items-center gap-1 text-lg" title="Son ruh halleri">
+            <span className="mr-1 text-xs text-slate-400">Son durum:</span>
+            {son.map((j) => <span key={j.id} title={`${j.title} • ${trh(j.date)}`}>{j.mod || "📝"}</span>)}
+          </div>
+        );
+      })()}
+      <div className="my-3"><input className={`${inp} max-w-[260px]`} value={ara} onChange={(e) => setAra(e.target.value)} placeholder="Günlükte ara..." /></div>
+      {liste.length === 0 ? <Bos yazi="Kayıt yok." /> : liste.slice(0, 30).map((j) => (
+        <div key={j.id} className="mb-2 rounded-xl border border-slate-200 p-3">
+          <b>{j.mod ? j.mod + " " : ""}{j.title}</b> <span className="text-[11px] text-slate-400">{trh(j.date)}</span>
+          <div className="mt-1 text-[13px]">{j.text}</div>
+          <SilBtn onClick={() => { if (confirm("Silinsin mi?")) setDb((d) => ({ ...d, journal: d.journal.filter((x) => x.id !== j.id) })); }} />
+        </div>
+      ))}
+      <div className="text-xs text-slate-400">Not: silinen kayıt kalıcı silinir — emin olmadan silme.</div>
+    </Card>
+  );
+}
+
+export function NotView({ db, setDb }: Props) {
+  const [baslik, setBaslik] = useState("");
+  const [metin, setMetin] = useState("");
+  const [ara, setAra] = useState("");
+
+  const ekle = () => {
+    const t = metin.trim() || baslik.trim();
+    if (!t) return;
+    setDb((d) => ({ ...d, notes: [...d.notes, { id: uid(), title: baslik || "Not", text: t }] }));
+    setBaslik(""); setMetin("");
+  };
+
+  const a = ara.toLocaleLowerCase("tr");
+  const liste = [...db.notes].reverse().filter((n) => !a || ((n.title + " " + n.text).toLocaleLowerCase("tr").includes(a)));
+
+  return (
+    <Card>
+      <Baslik>Yeni Not</Baslik>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <Alan etiket="Başlık"><input className={inp} value={baslik} onChange={(e) => setBaslik(e.target.value)} /></Alan>
+        <Alan etiket="İçerik"><input className={inp} value={metin} onChange={(e) => setMetin(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") ekle(); }} /></Alan>
+      </div>
+      <div className="mt-2"><Btn kucuk onClick={ekle}>Ekle</Btn></div>
+      <div className="my-3"><input className={`${inp} max-w-[260px]`} value={ara} onChange={(e) => setAra(e.target.value)} placeholder="Notlarda ara..." /></div>
+      {liste.length === 0 ? <Bos yazi="Not yok." /> : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {liste.map((n) => (
+            <div key={n.id} className="rounded-xl border border-slate-200 p-3">
+              <b>{n.title}</b>
+              <div className="mt-1 text-[13px]">{n.text}</div>
+              <SilBtn onClick={() => setDb((d) => ({ ...d, notes: d.notes.filter((x) => x.id !== n.id) }))} />
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
