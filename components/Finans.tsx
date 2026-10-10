@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { BookOpen, Plus } from "lucide-react";
 import type { Account, Db, Ledger, Sablon, Tx } from "../lib/store";
 import { HESAP_TIP_AD, KATEGORILER } from "../lib/store";
 import { bugun, para, trh, uid } from "../lib/format";
@@ -50,6 +50,8 @@ export default function Finans({ db, setDb }: Props) {
   const ozet = useMemo(() => defterOzet(hesaplar, db.transactions), [hesaplar, db.transactions]);
 
   const [defterForm, setDefterForm] = useState(false);
+  /** Defter yönetim paneli açık mı (varsayılan kapalı: yalnızca aktif defter görünür) */
+  const [defterPanel, setDefterPanel] = useState(false);
   const [defterAd, setDefterAd] = useState("");
   const [defterRenk, setDefterRenk] = useState("#3b82f6");
   const [defterAciklama, setDefterAciklama] = useState("");
@@ -510,27 +512,54 @@ export default function Finans({ db, setDb }: Props) {
 
   return (
     <div className="space-y-3">
+      {/* Defter başlığı: yalnızca AKTİF defter görünür. Defter yönetimi
+          istenirse altındaki "Defterler" düğmesiyle açılır — böylece bir
+          deftere girince diğer defterlerin bilgisi ekranda durmaz. */}
       <Card>
-        <div className="flex flex-wrap gap-2">
-          {db.ledgers.filter((d) => gizlileriGoster || !d.gizli).map((d) => (
-            <button
-              key={d.id}
-              onClick={() => setAktif(d.id)}
-              className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition ${
-                d.id === db.aktif ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:bg-slate-50"
-              } ${d.gizli ? "opacity-60" : ""}`}
-              title={d.aciklama || d.name}
-            >
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: d.color }} />
-              {d.name}
-              {d.gizli && <span className="text-[10px]">🙈</span>}
-              {d.paraBirimi && <span className={`text-[11px] ${d.id === db.aktif ? "text-white/70" : "text-slate-400"}`}>{d.paraBirimi}</span>}
-            </button>
-          ))}
-          <Btn ghost kucuk onClick={() => setDefterForm(!defterForm)}>
-            <Plus size={14} className="mr-1 inline" /> Yeni Defter
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: aktifDefter.color }} />
+            <div className="min-w-0">
+              <b className="block truncate text-[15px]">{aktifDefter.name}</b>
+              <span className="block truncate text-[11px] text-slate-500">
+                {aktifDefter.aciklama || "Defter"}
+                {aktifDefter.paraBirimi ? ` · ${aktifDefter.paraBirimi}` : ""}
+              </span>
+            </div>
+          </div>
+          <Btn ghost kucuk onClick={() => setDefterPanel(!defterPanel)}>
+            <BookOpen size={14} className="mr-1 inline" />
+            Defterler ({db.ledgers.length})
           </Btn>
         </div>
+
+        {defterPanel && (
+          <div className="mt-3 border-t border-slate-100 pt-3">
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              Defterler · açmak için tıkla
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {db.ledgers.filter((d) => gizlileriGoster || !d.gizli).map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => { setAktif(d.id); setDefterPanel(false); }}
+                  className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                    d.id === db.aktif ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:bg-slate-50"
+                  } ${d.gizli ? "opacity-60" : ""}`}
+                  title={d.aciklama || d.name}
+                >
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: d.color }} />
+                  {d.name}
+                  {d.gizli && <span className="text-[10px]">🙈</span>}
+                  {d.paraBirimi && <span className={`text-[11px] ${d.id === db.aktif ? "text-white/70" : "text-slate-400"}`}>{d.paraBirimi}</span>}
+                </button>
+              ))}
+              <Btn ghost kucuk onClick={() => setDefterForm(!defterForm)}>
+                <Plus size={14} className="mr-1 inline" /> Yeni Defter
+              </Btn>
+            </div>
+          </div>
+        )}
         {defterForm && (
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
             <Alan etiket="Defter adı">

@@ -219,33 +219,19 @@ export default function Sidebar({
                 <kbd className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium tracking-wide">Ctrl K</kbd>
               </button>
             )}
-            <button
-              aria-haspopup="menu"
-              aria-expanded={acik === "defter"}
-              title="Defter seç (Finansal Yönetim)"
-              onClick={(e) => (acik === "defter" ? setAcik(null) : konumAc(e, "defter", 312))}
-              className="flex items-center gap-2 rounded-full border border-white/15 py-1.5 pl-2.5 pr-2.5 transition hover:bg-white/10"
+            <span
+              title={aktifDefter?.aciklama || aktifDefter?.name || "Defter"}
+              className="flex items-center gap-2 rounded-full border border-white/15 py-1.5 pl-2.5 pr-3"
             >
               <span
                 className="h-2.5 w-2.5 shrink-0 rounded-full"
                 style={{ background: aktifDefter?.color || "#94a3b8" }}
               />
-              <b className="max-w-[190px] truncate text-[12.5px] font-semibold text-white">
+              <b className="max-w-[170px] truncate text-[12.5px] font-semibold text-white">
                 {aktifDefter?.name ?? "Defter"}
               </b>
-              <ChevronDown
-                size={14}
-                className={`shrink-0 transition-transform duration-200 ${acik === "defter" ? "rotate-180" : ""}`}
-              />
-            </button>
+            </span>
           </div>
-          <button
-            title="Yeni defter (Finansal Yönetim)"
-            onClick={() => setView("finans")}
-            className="shrink-0 rounded-full border border-dashed border-white/25 p-1 text-slate-300 transition hover:bg-white/10 hover:text-white"
-          >
-            <Plus size={14} />
-          </button>
 
           <span className="hidden shrink-0 rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-slate-400 lg:inline-block">
             🔒 %100 yerel · bu PC&apos;de
@@ -341,64 +327,7 @@ export default function Sidebar({
           </div>
         )}
 
-        {/* defter seçici paneli — tek satırda çip yığını yerine liste */}
-        {acik === "defter" && (
-          <div
-            role="menu"
-            aria-label="Defterler"
-            style={{ position: "fixed", left: konum.sol, top: konum.ust, width: 312 }}
-            className="z-50 rounded-xl border border-white/10 bg-slate-800 p-1.5 shadow-[0_18px_40px_-12px_rgba(0,0,0,0.7)]"
-          >
-            <div className="flex items-center justify-between px-2 pb-1 pt-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Defterler · {ledgers.length}
-              </span>
-              <span className="text-[10px] text-slate-500">seçince Finansal Yönetim&apos;e gider</span>
-            </div>
-            {ledgers
-              .filter((d) => !d.gizli || gizlileriGoster || d.id === aktif)
-              .map((d) => {
-                const secili = d.id === aktif;
-                return (
-                  <button
-                    key={d.id}
-                    role="menuitem"
-                    title={d.aciklama || d.name}
-                    onClick={() => {
-                      setAktif(d.id);
-                      setView("finans");
-                      setAcik(null);
-                    }}
-                    className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition ${
-                      secili ? "bg-white text-slate-900" : "text-slate-200 hover:bg-white/10"
-                    } ${d.gizli && !secili ? "opacity-70" : ""}`}
-                  >
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: d.color }} />
-                    <span className="min-w-0 flex-1">
-                      <b className="block truncate text-[13px] font-semibold">{d.name}</b>
-                      {d.aciklama && (
-                        <small className={`block truncate text-[11px] ${secili ? "text-slate-500" : "text-slate-400"}`}>
-                          {d.aciklama}
-                        </small>
-                      )}
-                    </span>
-                    {d.gizli && <span className="text-[11px]">🙈</span>}
-                    {secili && <span className="shrink-0 text-[11px] font-bold">✓</span>}
-                  </button>
-                );
-              })}
-            {ledgers.some((d) => d.gizli) && (
-              <button
-                onClick={() => setGizlileriGoster((v) => !v)}
-                className="mt-1 w-full rounded-lg px-2 py-1.5 text-left text-[12px] text-slate-400 transition hover:bg-white/10 hover:text-white"
-              >
-                {gizlileriGoster
-                  ? "🙈 Gizlileri gizle"
-                  : `🙈 Gizli defterler (${ledgers.filter((d) => d.gizli).length})`}
-              </button>
-            )}
-          </div>
-        )}
+        {/* Defter seçimi artık sağ üstteki Oturum & Ayarlar menüsünde */}
       </header>
 
       {/* B3: mobil alt gezinme — dar ekranda tek elle kullanım */}
