@@ -1,4 +1,4 @@
-import type { Db } from "./store";
+import type { Db, Task } from "./store";
 import { bakiyeler } from "./finance";
 import { buAy, bugun, para } from "./format";
 
@@ -224,19 +224,83 @@ export function baglamMetni(db: Db): string {
   const hedef =
     db.goals.map((o) => `${o.name} %${o.target ? Math.round((Number(o.saved) / Number(o.target)) * 100) : 0}`).join("; ") ||
     "yok";
-  const acikGorev = db.tasks.filter((t) => !t.done).length;
-  const acikList = db.tasks.filter((t) => !t.done).slice(0, 5).map((t) => t.text).join("; ") || "yok";
-  const bugunPlan = db.plans.filter((p) => p.date === bugun()).slice(0, 5).map((p) => (p.saat ? p.saat + " " : "") + p.text).join("; ") || "yok";
+  // --- Görevler: asistan "bugün neler yaptım" diye sorunca okuyabilsin ---
+  const bugunT = bugun();
+  const listeAd = (t: Task) => (t.liste || "").trim() || "Genel";
+  const bugunGorevleri = db.tasks.filter((t) => t.tarih === bugunT);
+  const bekleyenBugun = bugunGorevleri.filter((t) => !t.done);
+  const tamamlananBugun = bugunGorevleri.filter((t) => t.done);
+  const gecikmisBiten = db.tasks.filter((t) => t.done && (t.tarih || "") < bugunT && t.tarih);
+  const bekleyenTum = db.tasks.filter((t) => !t.done);
+  const listeSayilari =
+    [...new Set(db.tasks.map(listeAd))]
+      .map((l) => {
+        const g = db.tasks.filter((t) => listeAd(t) === l);
+        return `${l} ${g.filter((t) => t.done).length}/${g.length}`;
+      })
+      .join(", ") || "yok";
+  const altliOzet = (t: Task) => {
+    const alt = t.altlar || [];
+    return alt.length ? ` [alt görev ${alt.filter((a) => a.done).length}/${alt.length}]` : "";
+  };
+  const bugunSatiri = bugunGorevleri.length
+    ? [
+        tamamlananBugun.length
+          ? `  ✓ TAMAMLANDI: ${tamamlananBugun.map((t) => `${t.text} (${listeAd(t)})${altliOzet(t)}`).join("; ")}`
+          : "  ✓ TAMAMLANDI: yok",
+        bekleyenBugun.length
+          ? `  ☐ YAPILACAK: ${bekleyenBugun.map((t) => `${t.text} (${listeAd(t)})${altliOzet(t)}`).join("; ")}`
+          : "  ☐ YAPILACAK: yok"
+      ].join("\n")
+    : "  Bugüne tarihlenmiş görev yok.";
+
+  const acikGorev = bekleyenTum.length;
+  const acikList = bekleyenTum.slice(0, 5).map((t) => t.text).join("; ") || "yok";
+
+  const bugunPlanlar = db.plans.filter((p) => p.date === bugunT);
+  const planSatiri = bugunPlanlar.length
+    ? `${bugunPlanlar.filter((p) => p.done).length}/${bugunPlanlar.length} tamamlandı — ` +
+      bugunPlanlar.map((p) => `${p.done ? "✓" : "○"} ${p.text}`).join("; ")
+    : "yok";
+
+  const bugunGunluk = db.journal.filter((j) => j.date === bugunT);
+  const etiketYaz = (j: { etiketler?: string[] }) => ((j.etiketler || []).length ? ` #${(j.etiketler || []).join(" #")}` : "");
+  const gunlukSatiri = bugunGunluk.length
+    ? bugunGunluk.map((j) => `${j.mod || "📓"} ${j.title}${etiketYaz(j)}: ${j.text.slice(0, 150)}`).join(" | ")
+    : "bugün günlük yazılmamış";
   const sonGun = [...db.journal].sort((a, c) => (a.date < c.date ? 1 : -1))[0];
   const modSatir = sonGun
-    ? `${sonGun.date} (${sonGun.mod || "mod yok"}): ${sonGun.title} — ${sonGun.text.slice(0, 200)}`
+    ? `${sonGun.date} (${sonGun.mod || "mod yok"})${etiketYaz(sonGun)}: ${sonGun.title} — ${sonGun.text.slice(0, 200)}`
     : "günlük yok";
+
+  const sonBitenler = db.tasks
+    .filter((t) => t.done)
+    .slice(-12)
+    .map((t) => `${t.text}${t.tarih ? ` [${t.tarih}]` : ""} (${listeAd(t)})`)
+    .join("; ") || "yok";
+
   return [
     `Aktif defter: ${ad}. Net ${para(v + b)} (Varlık ${para(v)}, Borç ${para(b)}).`,
     `Bu ay: gelir ${para(g)}, gider ${para(c)}. En çok harcama: ${top3}.`,
-    `Hedefler: ${hedef}. Açık görev (${acikGorev}): ${acikList}.`,
-    `Bugünkü planlar: ${bugunPlan}.`,
-    `Son günlük: ${modSatir}.`,
+    `Hedefler: ${hedef}.`,
+    "",
+    `📋 BUGÜN (${bugunT}) GÖREVLER:`,
+    bugunSatiri,
+    gecikmisBiten.length
+      ? `  ↳ Tarihi geçmiş ama tamamlanmış: ${gecikmisBiten.slice(-5).map((t) => `${t.text} [${t.tarih}]`).join("; ")}`
+      : "",
+    "",
+    `🗂 Görev listeleri (biten/toplam): ${listeSayilari}. Açık görev sayısı: ${acikGorev}.`,
+    `   Açık görevler: ${acikList}.`,
+    `   Son tamamlanan görevler: ${sonBitenler}.`,
+    "",
+    `📅 Bugünkü planlar: ${planSatiri}.`,
+    `📓 Bugünkü günlük: ${gunlukSatiri}.`,
+    `📓 Son günlük: ${modSatir}.`,
+    "",
+    `Kullanıcı "bugün neler yaptım" / "ne yaptım" / "bugün ne yaptın" derse yukarıdaki "📋 BUGÜN GÖREVLER", "📅 Bugünkü planlar" ve "📓 Bugünkü günlük" bölümlerini kullan.`,
     "Kullanıcı onayı olmadan kayıt/işlem önerme; sadece analiz ve soru-cevap yap. Günlük ve ruh haline şefkatle yaklaş, arkadaş gibi konuş."
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }

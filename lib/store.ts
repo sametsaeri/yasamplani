@@ -86,7 +86,16 @@ export type Habit = { id: string; name: string };
 export type HabitLog = { hid: string; date: string };
 export type Weight = { id: string; date: string; kg: number };
 export type Meal = { id: string; date: string; text: string };
-export type Journal = { id: string; date: string; title: string; text: string; mod: string; enerji: number };
+export type Journal = {
+  id: string;
+  date: string;
+  title: string;
+  text: string;
+  mod: string;
+  enerji: number;
+  /** kullanıcı etiketleri (#iş #aile gibi serbest metin) */
+  etiketler?: string[];
+};
 export type Note = { id: string; title: string; text: string };
 
 export type Db = {

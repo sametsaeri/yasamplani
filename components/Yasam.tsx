@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import type { Db, Plan, Task } from "../lib/store";
 import { bugun, para, trh, uid } from "../lib/format";
@@ -820,78 +820,248 @@ export function KiloView({ db, setDb }: Props) {
   );
 }
 
+
 export function GunlukView({ db, setDb }: Props) {
+  const [sekme, setSekme] = useState<"yaz" | "liste">("yaz");
   const [tarih, setTarih] = useState(bugun());
   const [baslik, setBaslik] = useState("");
   const [metin, setMetin] = useState("");
-  const [mod, setMod] = useState("");
+  const [ruh, setRuh] = useState("");
   const [enerji, setEnerji] = useState(3);
   const [ara, setAra] = useState("");
+  const [etiketler, setEtiketler] = useState<string[]>([]);
+  const [yeniEtiket, setYeniEtiket] = useState("");
+  const [yaziTipi, setYaziTipi] = useState<"sans" | "serif" | "mono">("sans");
+  const [yaziBoyu, setYaziBoyu] = useState(16);
+  const [onizleme, setOnizleme] = useState(false);
+  const [etiketFiltre, setEtiketFiltre] = useState("");
+  const alanRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const YAZI_TIPI: Record<string, string> = { sans: "font-sans", serif: "font-serif", mono: "font-mono" };
+
+  const etiketEkle = () => {
+    const e = yeniEtiket.trim().replace(/^#+/, "").trim();
+    if (!e) return;
+    if (!etiketler.some((x) => x.toLocaleLowerCase("tr") === e.toLocaleLowerCase("tr"))) setEtiketler([...etiketler, e]);
+    setYeniEtiket("");
+  };
+
+  /** Araç çubuğu: seçili metni işaretle */
+  const bicimle = (on: string, kap: string) => {
+    const el = alanRef.current;
+    if (!el) return;
+    const s = el.selectionStart, b = el.selectionEnd;
+    const secili = metin.slice(s, b) || "metin";
+    setMetin(metin.slice(0, s) + on + secili + kap + metin.slice(b));
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(s + on.length, s + on.length + secili.length);
+    });
+  };
 
   const kaydet = () => {
     if (!metin.trim()) return alert("Yazı gir.");
-    setDb((d) => ({ ...d, journal: [...d.journal, { id: uid(), date: tarih || bugun(), title: baslik || "Günlük", text: metin.trim(), mod, enerji }] }));
-    setMetin(""); setBaslik(""); setMod(""); setEnerji(3);
+    setDb((d) => ({
+      ...d,
+      journal: [...d.journal, {
+        id: uid(), date: tarih || bugun(), title: baslik || "Günlük",
+        text: metin.trim(), mod: ruh, enerji, etiketler: etiketler.length ? etiketler : undefined
+      }]
+    }));
+    setMetin(""); setBaslik(""); setRuh(""); setEnerji(3); setEtiketler([]); setYeniEtiket("");
+    setSekme("liste");
   };
 
+  /** Kayıtlardaki tüm etiketler */
+  const tumEtiketler = useMemo(() => {
+    const s = new Set<string>();
+    db.journal.forEach((j) => (j.etiketler || []).forEach((e) => s.add(e)));
+    return [...s].sort((a, b) => a.localeCompare(b, "tr"));
+  }, [db.journal]);
+
   const a = ara.toLocaleLowerCase("tr");
-  const liste = [...db.journal].reverse().filter((j) => !a || ((j.title + " " + j.text).toLocaleLowerCase("tr").includes(a)));
+  const liste = [...db.journal]
+    .reverse()
+    .filter((j) => (etiketFiltre ? (j.etiketler || []).includes(etiketFiltre) : true))
+    .filter((j) => !a || (j.title + " " + j.text + " " + (j.etiketler || []).join(" ")).toLocaleLowerCase("tr").includes(a));
+
+  /** Basit markdown benzeri önizleme */
+  const onizleHtml = (s: string) =>
+    s.split("\n").map((satir) => {
+      let t = satir
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+        .replace(/_(.+?)_/g, "<u>$1</u>")
+        .replace(/`(.+?)`/g, '<code class="rounded bg-slate-100 px-1">$1</code>');
+      t = t.replace(/(^|[^*])\*([^*]+)\*/g, "$1<i>$2</i>");
+      t = t.replace(/^### (.*)$/, '<b class="text-[15px]">$1</b>')
+           .replace(/^## (.*)$/, '<b class="text-[17px]">$1</b>')
+           .replace(/^# (.*)$/, '<b class="text-[19px]">$1</b>')
+           .replace(/^- (.*)$/, "•&nbsp;&nbsp;$1");
+      return '<div class="mb-1">' + (t || "&nbsp;") + "</div>";
+    }).join("");
 
   return (
-    <Card>
-      <Baslik>Yeni Kayıt</Baslik>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <Alan etiket="Tarih"><input type="date" className={inp} value={tarih} onChange={(e) => setTarih(e.target.value)} /></Alan>
-        <Alan etiket="Başlık"><input className={inp} value={baslik} onChange={(e) => setBaslik(e.target.value)} placeholder="örn: İş" /></Alan>
-        <div className="sm:col-span-2">
-          <span className="mb-1 block text-xs text-slate-500">Ruh hali (isteğe bağlı)</span>
-          <div className="flex flex-wrap gap-1">
-            {[["", "Yok"], ["😄", "Çok iyi"], ["🙂", "İyi"], ["😐", "Normal"], ["😟", "Kötü"], ["😢", "Çok kötü"]].map(([v, t]) => (
-              <button key={t} type="button" title={t} onClick={() => setMod(v)}
-                className={`rounded-lg border px-2 py-1 text-lg ${mod === v ? "border-slate-900 bg-slate-900" : "border-slate-200 bg-white"}`}>
-                {v || "—"}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="sm:col-span-2">
-          <span className="mb-1 block text-xs text-slate-500">Enerji seviyesi (1–5)</span>
-          <div className="flex items-center gap-1">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button key={n} type="button" onClick={() => setEnerji(n)}
-                className={`h-7 w-7 rounded-lg border text-xs font-bold transition ${enerji === n ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-500 hover:border-slate-400"}`}>
-                {n}
-              </button>
-            ))}
-            <span className="ml-2 text-xs text-slate-400">{["🛌", "😮‍💨", "😐", "🙂", "⚡"][enerji - 1]}</span>
-          </div>
-        </div>
-        <div className="sm:col-span-2"><Alan etiket="Yazı"><textarea className={`${inp} min-h-[90px]`} value={metin} onChange={(e) => setMetin(e.target.value)} /></Alan></div>
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        <Btn ghost={sekme !== "yaz"} onClick={() => setSekme("yaz")}>✍️ Yeni Günlük Yaz</Btn>
+        <Btn ghost={sekme !== "liste"} onClick={() => setSekme("liste")}>📚 Günlüklerim ({db.journal.length})</Btn>
       </div>
-      <div className="mt-2"><Btn kucuk onClick={kaydet}>Kaydet</Btn></div>
-      {(() => {
-        const son = [...db.journal].sort((a, c) => (a.date < c.date ? -1 : 1)).slice(0, 7);
-        if (son.length === 0) return null;
-        return (
-          <div className="mb-1 mt-2 flex items-center gap-1 text-lg" title="Son ruh halleri">
-            <span className="mr-1 text-xs text-slate-400">Son durum:</span>
-            {son.map((j) => <span key={j.id} title={`${j.title} • ${trh(j.date)}`}>{j.mod || "📝"}</span>)}
+
+      {sekme === "yaz" && (
+        <Card>
+          <Baslik sag={<span className="text-xs font-normal text-slate-400">yaz, biçimlendir, etiketle</span>}>Yeni Günlük</Baslik>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <Alan etiket="Tarih"><input type="date" className={inp} value={tarih} onChange={(e) => setTarih(e.target.value)} /></Alan>
+            <Alan etiket="Başlık"><input className={inp} value={baslik} onChange={(e) => setBaslik(e.target.value)} placeholder="örn: Bugünün akşamı" /></Alan>
           </div>
-        );
-      })()}
-      <div className="my-3"><input className={`${inp} max-w-[260px]`} value={ara} onChange={(e) => setAra(e.target.value)} placeholder="Günlükte ara..." /></div>
-      {liste.length === 0 ? <Bos yazi="Kayıt yok." /> : liste.slice(0, 30).map((j) => (
-        <div key={j.id} className="mb-2 rounded-xl border border-slate-200 p-3">
-          <b>{j.mod ? j.mod + " " : ""}{j.title}</b> <span className="text-[11px] text-slate-400">{trh(j.date)}</span>
-          <div className="mt-1 text-[13px]">{j.text}</div>
-          <SilBtn onClick={() => { if (confirm("Silinsin mi?")) setDb((d) => ({ ...d, journal: d.journal.filter((x) => x.id !== j.id) })); }} />
-        </div>
-      ))}
-      <div className="text-xs text-slate-400">Not: silinen kayıt kalıcı silinir — emin olmadan silme.</div>
-    </Card>
+
+          <div className="mt-3">
+            <span className="mb-1 block text-xs font-medium text-slate-500">Etiketler</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {etiketler.map((e) => (
+                <span key={e} className="flex items-center gap-1 rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-white">
+                  #{e}
+                  <button onClick={() => setEtiketler(etiketler.filter((x) => x !== e))} className="text-slate-400 hover:text-white">✕</button>
+                </span>
+              ))}
+              <input
+                className="min-w-[130px] flex-1 rounded-[9px] border border-slate-200 px-2.5 py-1 text-[12px] outline-none focus:border-slate-900"
+                value={yeniEtiket}
+                placeholder="etiket yaz + Enter"
+                onChange={(e) => setYeniEtiket(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === ",") { e.preventDefault(); etiketEkle(); }
+                  if (e.key === "Backspace" && !yeniEtiket && etiketler.length) setEtiketler(etiketler.slice(0, -1));
+                }}
+              />
+            </div>
+            {tumEtiketler.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                <span className="text-[11px] text-slate-400">Önceki:</span>
+                {tumEtiketler.slice(0, 12).map((e) => (
+                  <button key={e} onClick={() => !etiketler.includes(e) && setEtiketler([...etiketler, e])}
+                    className="rounded-full border border-slate-200 px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-50">#{e}</button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <span className="mb-1 block text-xs font-medium text-slate-500">Ruh hali</span>
+              <div className="flex flex-wrap gap-1">
+                {[["", "Yok"], ["😄", "Çok iyi"], ["🙂", "İyi"], ["😐", "Normal"], ["😟", "Kötü"], ["😢", "Çok kötü"]].map(([v, t]) => (
+                  <button key={t} type="button" title={t} onClick={() => setRuh(v)}
+                    className={`rounded-lg border px-2 py-1 text-lg transition ${ruh === v ? "border-slate-900 bg-slate-900" : "border-slate-200 bg-white hover:border-slate-400"}`}>
+                    {v || "—"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="mb-1 block text-xs font-medium text-slate-500">Enerji (1–5)</span>
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button key={n} type="button" onClick={() => setEnerji(n)}
+                    className={`h-7 w-7 rounded-lg border text-xs font-bold transition ${enerji === n ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-500 hover:border-slate-400"}`}>
+                    {n}
+                  </button>
+                ))}
+                <span className="ml-2 text-xs text-slate-400">{["🛌", "😮‍💨", "😐", "🙂", "⚡"][enerji - 1]}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Yazı stili araç çubuğu */}
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 p-2">
+            <span className="mr-1 text-[11px] font-medium text-slate-500">Yazı stili:</span>
+            <Btn kucuk ghost={yaziTipi !== "sans"} onClick={() => setYaziTipi("sans")} title="Sans">Sans</Btn>
+            <Btn kucuk ghost={yaziTipi !== "serif"} onClick={() => setYaziTipi("serif")} title="Serif (kitap)">Serif</Btn>
+            <Btn kucuk ghost={yaziTipi !== "mono"} onClick={() => setYaziTipi("mono")} title="Mono">Mono</Btn>
+            <span className="mx-1 h-5 w-px bg-slate-300" />
+            <Btn kucuk ghost onClick={() => bicimle("**", "**")} title="Kalın"><b>K</b></Btn>
+            <Btn kucuk ghost onClick={() => bicimle("*", "*")} title="İtalik"><i>I</i></Btn>
+            <Btn kucuk ghost onClick={() => bicimle("_", "_")} title="Altı çizili"><u>U</u></Btn>
+            <Btn kucuk ghost onClick={() => bicimle("`", "`")} title="Kod">{"<>"}</Btn>
+            <span className="mx-1 h-5 w-px bg-slate-300" />
+            <span className="text-[11px] text-slate-500">Boyut:</span>
+            <Btn kucuk ghost onClick={() => setYaziBoyu(Math.max(12, yaziBoyu - 2))} title="Küçült">A−</Btn>
+            <span className="w-9 text-center text-[11px] font-medium text-slate-600">{yaziBoyu}px</span>
+            <Btn kucuk ghost onClick={() => setYaziBoyu(Math.min(30, yaziBoyu + 2))} title="Büyüt">A+</Btn>
+            <span className="mx-1 h-5 w-px bg-slate-300" />
+            <Btn kucuk ghost={!onizleme} onClick={() => setOnizleme(!onizleme)}>{onizleme ? "✏️ Düzenle" : "👁 Önizle"}</Btn>
+          </div>
+
+          <div className="mt-2">
+            {onizleme ? (
+              <div
+                className={`min-h-[340px] rounded-[9px] border border-slate-200 bg-white p-4 leading-relaxed ${YAZI_TIPI[yaziTipi]}`}
+                style={{ fontSize: yaziBoyu }}
+                dangerouslySetInnerHTML={{ __html: onizleHtml(metin) || '<span style="color:#cbd5e1">Önizle için yazı gir…</span>' }}
+              />
+            ) : (
+              <textarea
+                ref={alanRef}
+                className={`${inp} min-h-[340px] resize-y leading-relaxed ${YAZI_TIPI[yaziTipi]}`}
+                style={{ fontSize: yaziBoyu }}
+                value={metin}
+                onChange={(e) => setMetin(e.target.value)}
+                placeholder={"Bugün neler oldu? Serbestçe yaz…\n\nBiçimlendirme: **kalın**, *italik*, _altı çizili_, `kod`, # başlık, - liste satırı"}
+              />
+            )}
+          </div>
+          <p className="mt-1 text-[11px] text-slate-400">
+            İpucu: **kalın**, *italik*, _altı çizili_, `kod`, # başlık, - liste satırı yazabilirsin — önizlemede biçimli görünür.
+          </p>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Btn onClick={kaydet}>Kaydet</Btn>
+            <Btn ghost onClick={() => { setMetin(""); setBaslik(""); setEtiketler([]); }}>Temizle</Btn>
+          </div>
+        </Card>
+      )}
+
+      {sekme === "liste" && (
+        <Card>
+          <Baslik sag={<span className="text-xs font-normal text-slate-400">{db.journal.length} kayıt</span>}>Günlüklerim</Baslik>
+
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <input className={`${inp} max-w-[260px]`} value={ara} onChange={(e) => setAra(e.target.value)} placeholder="Günlükte ara..." />
+            <div className="flex flex-wrap gap-1">
+              <button onClick={() => setEtiketFiltre("")}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${!etiketFiltre ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>
+                Tümü
+              </button>
+              {tumEtiketler.map((e) => (
+                <button key={e} onClick={() => setEtiketFiltre(etiketFiltre === e ? "" : e)}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${etiketFiltre === e ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}>
+                  #{e}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {liste.length === 0 ? <Bos yazi="Kayıt yok." /> : liste.map((j) => (
+            <div key={j.id} className="mb-2 rounded-xl border border-slate-200 p-3">
+              <div className="flex flex-wrap items-baseline gap-2">
+                <b>{j.mod ? j.mod + " " : ""}{j.title}</b>
+                <span className="text-[11px] text-slate-400">{trh(j.date)}</span>
+                {(j.etiketler || []).map((e) => (
+                  <span key={e} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">#{e}</span>
+                ))}
+                <SilBtn onClick={() => { if (confirm("Silinsin mi?")) setDb((d) => ({ ...d, journal: d.journal.filter((x) => x.id !== j.id) })); }} />
+              </div>
+              <div className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed">{j.text}</div>
+            </div>
+          ))}
+          <div className="text-xs text-slate-400">Not: silinen kayıt kalıcı silinir — emin olmadan silme.</div>
+        </Card>
+      )}
+    </div>
   );
 }
-
 export function NotView({ db, setDb }: Props) {
   const [baslik, setBaslik] = useState("");
   const [metin, setMetin] = useState("");
