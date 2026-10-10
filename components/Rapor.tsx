@@ -30,13 +30,6 @@ type Props = {
   db: Db;
   setDb: (u: (d: Db) => Db) => void;
   replaceAll: (d: Db) => void;
-  /** Oturum yönetimi bölümü için (panelden gelir) */
-  oturum?: {
-    eposta: string;
-    ad: string;
-    kilitle: () => void;
-    cikisYap: () => void;
-  };
 };
 
 /** Toplu fiş OCR: her fotoğraf için ayrı bir işlem taslağı */
@@ -50,7 +43,7 @@ type FisKayit = {
   taslak: IslemTaslak | null;
 };
 
-export function RaporView({ db, setDb, replaceAll, anahtar, oturum }: Props & { anahtar: string }) {
+export function RaporView({ db, setDb, replaceAll, anahtar }: Props & { anahtar: string }) {
   const aktifDefter = db.ledgers.find((d) => d.id === db.aktif);
   // Defter silme artık YALNIZCA bu bölümde (kullanıcı isteği)
   const [silDefterId, setSilDefterId] = useState<string | null>(null);
@@ -350,78 +343,6 @@ export function RaporView({ db, setDb, replaceAll, anahtar, oturum }: Props & { 
         })()}
       </Card>
 
-      <Card>
-        <Baslik>🔐 Oturum Yönetimi <span className="text-xs font-normal text-slate-400">• giriş, kilit, çıkış</span></Baslik>
-
-        {/* Kim giriş yapmış */}
-        {oturum && (
-          <div className="mb-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-lg shadow-sm">
-              {oturum.ad ? oturum.ad.trim().charAt(0).toLocaleUpperCase("tr") : "👤"}
-            </span>
-            <div className="min-w-0 flex-1">
-              <b className="block truncate text-sm">{oturum.ad || oturum.eposta}</b>
-              <span className="block truncate text-xs text-slate-500">{oturum.eposta}</span>
-            </div>
-            <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-              ● Etkin oturum
-            </span>
-          </div>
-        )}
-
-        {/* Eylemler: kilitle / çıkış */}
-        {oturum && (
-          <div className="mb-4 flex flex-wrap gap-2">
-            <Btn kucuk onClick={oturum.kilitle}>
-              🔒 Ekranı kilitle
-            </Btn>
-            <Btn kucuk onClick={oturum.cikisYap}>
-              <LogOut size={13} className="mr-1 inline" /> Oturumu kapat
-            </Btn>
-            <Btn kucuk ghost onClick={() => { setDb((d) => ({ ...d, ayarlar: { ...d.ayarlar, kilitDakika: 0 } })); }}>
-              Otomatik kilidi kapat
-            </Btn>
-          </div>
-        )}
-
-        {/* Otomatik kilit süresi */}
-        <div className="mb-2 border-t border-slate-100 pt-3">
-          <div className="mb-2 text-xs font-medium text-slate-500">Otomatik kilit</div>
-        </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <Alan etiket="Ne zaman kilitlensin?">
-            <select
-              className={inp}
-              value={String(db.ayarlar.kilitDakika ?? 0)}
-              onChange={(e) => setDb((d) => ({ ...d, ayarlar: { ...d.ayarlar, kilitDakika: Number(e.target.value) } }))}
-            >
-              <option value="0">Kapalı — hiç kilitleme</option>
-              <option value="1">1 dakika sonra</option>
-              <option value="2">2 dakika sonra</option>
-              <option value="3">3 dakika sonra</option>
-              <option value="5">5 dakika sonra</option>
-              <option value="10">10 dakika sonra</option>
-              <option value="15">15 dakika sonra</option>
-              <option value="30">30 dakika sonra</option>
-              <option value="60">1 saat sonra</option>
-              <option value="120">2 saat sonra</option>
-              <option value="240">4 saat sonra</option>
-            </select>
-          </Alan>
-          <Btn kucuk ghost onClick={() => setDb((d) => ({ ...d, ayarlar: { ...d.ayarlar, kilitDakika: 5 } }))}>
-            Hızlı: 5 dk
-          </Btn>
-          <Btn kucuk ghost onClick={() => setDb((d) => ({ ...d, ayarlar: { ...d.ayarlar, kilitDakika: 0 } }))}>
-            Hızlı: Kapat
-          </Btn>
-        </div>
-        <p className="mt-2 text-xs text-slate-400">
-          Seçtiğin süre <b>iki durumda</b> birden geçerlidir: (1) fare/klavye/dokunma olmazsa
-          hareketsiz kalırsan, (2) başka bir programa geçip uygulamayı <b>o süre kadar bırakırsan</b>.
-          Süre dolmadan geri dönersen kilit açık kalır — yani kısa bir bakış için şifre sormaz.
-          “Kapalı” seçersen hiç kilitlemez. Seçim bu bilgisayarda saklanır.
-        </p>
-      </Card>
 
       <Card>
         <Baslik>🔔 Ödeme Hatırlatmaları <span className="text-xs font-normal text-slate-400">• masaüstü bildirimi</span></Baslik>

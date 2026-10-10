@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, CircleHelp, Lock, LogOut, Plus, Settings, UserCog } from "lucide-react";
+import { ChevronDown, CircleHelp, Lock, LogOut, Plus, Settings } from "lucide-react";
 import Sidebar, { type View } from "../components/Sidebar";
 import KomutPaleti from "../components/KomutPaleti";
 import Finans from "../components/Finans";
@@ -480,7 +480,7 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
                     </button>
                   </div>
 
-                  {/* OTURUM */}
+                  {/* OTURUM — ayar panelinin içinde */}
                   <div className="border-b border-slate-100 py-1.5">
                     <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                       Oturum
@@ -492,20 +492,35 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
                       <Lock size={14} className="shrink-0 text-slate-500" /> Ekranı kilitle
                     </button>
                     <button
-                      onClick={() => { setView("rapor"); setHesapMenusu(false); }}
-                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition hover:bg-slate-50"
-                    >
-                      <UserCog size={14} className="shrink-0 text-slate-500" /> Oturum yönetimi
-                      <span className="ml-auto text-[11px] text-slate-400">
-                        {Number(db.ayarlar.kilitDakika) > 0 ? `${db.ayarlar.kilitDakika} dk` : "kapalı"}
-                      </span>
-                    </button>
-                    <button
                       onClick={() => { if (confirm("Oturum kapatılsın mı?")) { setHesapMenusu(false); cikis(); onCikis(); } }}
                       className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] font-medium text-red-600 transition hover:bg-red-50"
                     >
                       <LogOut size={14} className="shrink-0" /> Oturumu kapat
                     </button>
+
+                    {/* Otomatik kilit süresi — doğrudan panelde */}
+                    <div className="mt-1 border-t border-slate-100 px-3 pb-1 pt-2">
+                      <label className="mb-1 block text-[11px] font-medium text-slate-500">
+                        Otomatik kilit — ne zaman kilitlensin?
+                      </label>
+                      <select
+                        className="w-full rounded-[9px] border border-slate-200 bg-white px-2 py-1.5 text-[12px] outline-none focus:border-slate-900"
+                        value={String(db.ayarlar.kilitDakika ?? 0)}
+                        onChange={(e) =>
+                          setDb((d) => ({ ...d, ayarlar: { ...d.ayarlar, kilitDakika: Number(e.target.value) } }))
+                        }
+                      >
+                        <option value="0">Kapalı — hiç kilitleme</option>
+                        {[1, 2, 3, 5, 10, 15, 30].map((n) => <option key={n} value={n}>{n} dakika sonra</option>)}
+                        <option value="60">1 saat sonra</option>
+                        <option value="120">2 saat sonra</option>
+                        <option value="240">4 saat sonra</option>
+                      </select>
+                      <p className="mt-1 text-[10px] leading-snug text-slate-400">
+                        Boşta kalınca <b>ve</b> başka programa geçince bu süre kadar uzaklaşınca kilitlenir.
+                        Süre dolmadan dönersen kilit açık kalır.
+                      </p>
+                    </div>
                   </div>
 
                   {/* AYARLAR */}
@@ -549,18 +564,7 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
           {view === "gunluk" && <GunlukView db={db} setDb={setDb} />}
           {view === "not" && <NotView db={db} setDb={setDb} />}
           {view === "rapor" && (
-            <RaporView
-              db={db}
-              setDb={setDb}
-              replaceAll={replaceAll}
-              anahtar={NS}
-              oturum={{
-                eposta,
-                ad: kullaniciAd(eposta),
-                kilitle: () => setKilitli(true),
-                cikisYap: () => { if (confirm("Oturum kapatılsın mı?")) { cikis(); onCikis(); } }
-              }}
-            />
+            <RaporView db={db} setDb={setDb} replaceAll={replaceAll} anahtar={NS} />
           )}
           {view === "asistan" && <AsistanView db={db} setDb={setDb} />}
           {view === "yardim" && <YardimView />}
@@ -577,7 +581,7 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
               ? `${db.ayarlar.kilitDakika} dakika hareketsiz kaldın veya başka programa geçtin.`
               : "Ekran kilitlendi."}{" "}
             Devam etmek için şifreni gir.{" "}
-            <span className="text-slate-500">(Süreyi Rapor → Oturum Yönetimi'nden değiştirebilirsin)</span>
+            <span className="text-slate-500">(Süreyi sağ üstteki kullanıcı menüsünden değiştirebilirsin)</span>
           </p>
           <form
             className="mt-2 flex w-full max-w-[320px] gap-2"

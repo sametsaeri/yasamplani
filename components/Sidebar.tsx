@@ -219,18 +219,8 @@ export default function Sidebar({
                 <kbd className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium tracking-wide">Ctrl K</kbd>
               </button>
             )}
-            <span
-              title={aktifDefter?.aciklama || aktifDefter?.name || "Defter"}
-              className="flex items-center gap-2 rounded-full border border-white/15 py-1.5 pl-2.5 pr-3"
-            >
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ background: aktifDefter?.color || "#94a3b8" }}
-              />
-              <b className="max-w-[170px] truncate text-[12.5px] font-semibold text-white">
-                {aktifDefter?.name ?? "Defter"}
-              </b>
-            </span>
+            {/* Defter rozeti kaldırıldı: defter bilgisi ve oturum yönetimi sağ üstteki
+              panelde bir arada. */}
           </div>
 
           <span className="hidden shrink-0 rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-slate-400 lg:inline-block">

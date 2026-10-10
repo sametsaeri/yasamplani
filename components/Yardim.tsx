@@ -67,7 +67,8 @@ const BOLUMLER: Bolum[] = [
       { s: "Otomatik yedek", a: "Her değişiklikte en fazla 2 dakikada bir sessizce anlık görüntü alınır (son 5 tanesi tutulur). Elle yedeklemene gerek yoktur." },
       { s: "Otomatik kurtarma", a: "Veri bozuksa en yakın sağlam yedeğe kendiliğinden dönülür, üstte uyarı çıkar. Bozuk kopya asla atılmaz; Rapor → Kurtarma bölümünden indirilebilir." },
       { s: "Anlık görüntüden geri dönüş", a: "Raporlar & Arşiv → \"⏱ Otomatik Anlık Görüntüler\" → Geri Yükle." },
-      { s: "Otomatik kilit", a: "Raporlar & Arşiv → 🔐 Oturum Yönetimi → \"Ne zaman kilitlensin?\". Boşta kalınca ya da başka programa geçince seçtiğin süre dolunca ekran kilitlenir; süre dolmadan dönersen kilit açık kalır. Aynı yerde ekranı kilitleme ve oturumu kapatma düğmeleri de var." },
+      { s: "Otomatik kilit", a: "Sağ üstteki kullanıcı menüsünü aç → Oturum bölümünde \"Ne zaman kilitlensin?\" seç. Boşta kalınca ya da başka programa geçince seçtiğin süre dolunca ekran kilitlenir; süre dolmadan dönersen kilit açık kalır. Aynı menüde ekranı kilitleme ve oturumu kapatma düğmeleri de var." },
+      { s: "Defter seçimi", a: "Sağ üstteki kullanıcı menüsünün Defter bölümünden defter değiştir. Finans ekranındaki \"Defterler (n)\" düğmesiyle de yönetebilirsin; defter silmek yalnızca Ayarlar → 🗂 Defter Yönetimi bölümünde yapılır." },
       { s: "Şifremi unuttum", a: "Giriş ekranında güvenlik sorunun cevabıyla sıfırlayabilirsin." },
       { s: "Elle yedek", a: "Raporlar → Yedek İndir (JSON) / Yedek Yükle. Base44'ten taşınmak için CSV Aktar (Base44) kullanılır: Ledger → Account → Transaction sırasıyla aktarılır." }
     ]
