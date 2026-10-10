@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, ChevronDown, CircleHelp, Lock, LogOut, Wallet } from "lucide-react";
+import { ChevronDown, CircleHelp, Lock, LogOut, Plus, Settings, UserCog } from "lucide-react";
 import Sidebar, { type View } from "../components/Sidebar";
 import KomutPaleti from "../components/KomutPaleti";
 import Finans from "../components/Finans";
@@ -440,8 +440,8 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
             {hesapMenusu && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setHesapMenusu(false)} />
-                <div className="absolute right-0 top-full z-50 mt-2 w-[262px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
-                  <div className="flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-3 py-3">
+                <div className="absolute right-0 top-full z-50 mt-2 max-h-[calc(100vh-140px)] w-[288px] overflow-auto rounded-2xl border border-slate-200 bg-white shadow-xl">
+                  <div className="sticky top-0 z-10 flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-3 py-3">
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-900 text-sm font-bold text-white">
                       {(kullaniciAd(eposta) || eposta).trim().charAt(0).toLocaleUpperCase("tr")}
                     </span>
@@ -450,31 +450,80 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
                       <span className="block truncate text-[11px] text-slate-500">{eposta}</span>
                     </div>
                   </div>
-                  <div className="py-1">
-                    {[
-                      { ikon: <Lock size={14} />, ad: "Ekranı kilitle", ip: "Şifreyle geri dön", eylem: () => { setKilitli(true); setHesapMenusu(false); } },
-                      { ikon: <Wallet size={14} />, ad: "Oturum yönetimi", ip: "Otomatik kilit süresi, kilitle, çıkış", eylem: () => { setView("rapor"); setHesapMenusu(false); } },
-                      { ikon: <BookOpen size={14} />, ad: "Defterler", ip: `${db.ledgers.length} defter — aç, yönet, sil`, eylem: () => { setView("finans"); setHesapMenusu(false); } },
-                      { ikon: <CircleHelp size={14} />, ad: "Yardım", ip: "Kısa yollar ve SSS", eylem: () => { setView("yardim"); setHesapMenusu(false); } }
-                    ].map((o) => (
+
+                  {/* DEFTER SEÇİMİ */}
+                  <div className="border-b border-slate-100 py-1.5">
+                    <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Defter · {db.ledgers.length}
+                    </div>
+                    {db.ledgers.map((d) => (
                       <button
-                        key={o.ad}
-                        onClick={o.eylem}
-                        className="flex w-full items-start gap-2.5 px-3 py-2 text-left transition hover:bg-slate-50"
+                        key={d.id}
+                        onClick={() => { setAktif(d.id); setHesapMenusu(false); }}
+                        title={d.aciklama || d.name}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition hover:bg-slate-50"
                       >
-                        <span className="mt-0.5 shrink-0 text-slate-500">{o.ikon}</span>
-                        <span className="min-w-0 flex-1">
-                          <b className="block text-[13px] font-medium">{o.ad}</b>
-                          <span className="block truncate text-[11px] text-slate-500">{o.ip}</span>
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: d.color }} />
+                        <span className={`min-w-0 flex-1 truncate ${d.id === db.aktif ? "font-semibold text-slate-900" : ""}`}>
+                          {d.name}
                         </span>
+                        {d.gizli && <span className="text-[10px]">🙈</span>}
+                        {d.paraBirimi && <span className="shrink-0 text-[11px] text-slate-400">{d.paraBirimi}</span>}
+                        {d.id === db.aktif && <span className="shrink-0 text-[11px] font-bold text-slate-900">✓</span>}
                       </button>
                     ))}
-                    <div className="my-1 border-t border-slate-100" />
+                    <button
+                      onClick={() => { setHesapMenusu(false); setView("finans"); }}
+                      className="mt-1 flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[12px] font-medium text-slate-600 transition hover:bg-slate-50"
+                    >
+                      <Plus size={13} /> Defter yönetimi (yeni, sil, gizle)
+                    </button>
+                  </div>
+
+                  {/* OTURUM */}
+                  <div className="border-b border-slate-100 py-1.5">
+                    <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Oturum
+                    </div>
+                    <button
+                      onClick={() => { setKilitli(true); setHesapMenusu(false); }}
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition hover:bg-slate-50"
+                    >
+                      <Lock size={14} className="shrink-0 text-slate-500" /> Ekranı kilitle
+                    </button>
+                    <button
+                      onClick={() => { setView("rapor"); setHesapMenusu(false); }}
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition hover:bg-slate-50"
+                    >
+                      <UserCog size={14} className="shrink-0 text-slate-500" /> Oturum yönetimi
+                      <span className="ml-auto text-[11px] text-slate-400">
+                        {Number(db.ayarlar.kilitDakika) > 0 ? `${db.ayarlar.kilitDakika} dk` : "kapalı"}
+                      </span>
+                    </button>
                     <button
                       onClick={() => { if (confirm("Oturum kapatılsın mı?")) { setHesapMenusu(false); cikis(); onCikis(); } }}
                       className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] font-medium text-red-600 transition hover:bg-red-50"
                     >
-                      <LogOut size={14} /> Oturumu kapat
+                      <LogOut size={14} className="shrink-0" /> Oturumu kapat
+                    </button>
+                  </div>
+
+                  {/* AYARLAR */}
+                  <div className="py-1.5">
+                    <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Ayarlar
+                    </div>
+                    <button
+                      onClick={() => { setView("rapor"); setHesapMenusu(false); }}
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition hover:bg-slate-50"
+                    >
+                      <Settings size={14} className="shrink-0 text-slate-500" /> Ayarlar & yedekler
+                    </button>
+                    <button
+                      onClick={() => { setView("yardim"); setHesapMenusu(false); }}
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition hover:bg-slate-50"
+                    >
+                      <CircleHelp size={14} className="shrink-0 text-slate-500" /> Yardım
                     </button>
                   </div>
                 </div>
