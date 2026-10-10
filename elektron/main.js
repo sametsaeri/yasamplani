@@ -1,13 +1,43 @@
 // Hesap Planım - Masaüstü (Electron) ana işlemi.
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, protocol, net } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const { pathToFileURL, URL } = require("url");
 
 // Windows 10+ masaüstü bildirimleri için uygulama kimliği (ödeme hatırlatıcıları)
 app.setAppUserModelId("com.hesapplanim.app");
 
+// "app://" protokolü: statik çıktıyı kök dizinden servis eder. file:// yerine
+// bunu kullanıyoruz çünkü file:// altında mutlak yollar (/_next/...) disk
+// kökünde aranıyor ve sayfa "Yükleniyor..."de takılı kalıyordu.
+protocol.registerSchemesAsPrivileged([
+  { scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } }
+]);
+
 let pencere = null;
 const AZAMI_DOSYA = 10;
+
+function kokDizini() {
+  return path.join(__dirname, "..", "out");
+}
+
+function appProtocolKur() {
+  protocol.handle("app", (istek) => {
+    let yol = decodeURIComponent(new URL(istek.url).pathname);
+    if (!yol || yol === "/") yol = "/index.html";
+    // dizin dışına çıkışı engelle (path traversal koruması)
+    const tam = path.normalize(path.join(kokDizini(), yol));
+    if (!tam.startsWith(path.normalize(kokDizini()))) {
+      return new Response("Yasak", { status: 403 });
+    }
+    let hedef = tam;
+    if (!fs.existsSync(hedef) || fs.statSync(hedef).isDirectory()) {
+      const html = path.join(tam, "index.html");
+      hedef = fs.existsSync(html) ? html : path.join(kokDizini(), "404.html");
+    }
+    return net.fetch(pathToFileURL(hedef).toString());
+  });
+}
 
 function yedekKlasor() {
   const k = path.join(app.getPath("userData"), "yedekler");
@@ -82,11 +112,14 @@ function ac() {
   if (process.env.ELECTRON_DEV) {
     pencere.loadURL("http://localhost:3000");
   } else {
-    pencere.loadFile(path.join(__dirname, "..", "out", "index.html"));
+    pencere.loadURL("app://masaustu/index.html");
   }
 }
 
-app.whenReady().then(ac);
+app.whenReady().then(() => {
+  if (!process.env.ELECTRON_DEV) appProtocolKur();
+  ac();
+});
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });

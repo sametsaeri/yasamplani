@@ -59,7 +59,14 @@ export type Task = {
   /** takvimde gösterilecek son/görev tarihi (YYYY-AA-GG) */
   tarih?: string;
 };
-export type Plan = { id: string; date: string; text: string; saat: string };
+export type Plan = {
+  id: string;
+  date: string;
+  text: string;
+  saat: string;
+  /** plan tamamlandı mı (eski kayıtlarda yoksa tamamlanmamış sayılır) */
+  done?: boolean;
+};
 /** Düzenli gelir/gider şablonu: her ay otomatik uygulanabilir tekrar kayıt */
 export type Sablon = {
   id: string;

@@ -2,14 +2,66 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import type { Db, Task } from "../lib/store";
+import type { Db, Plan, Task } from "../lib/store";
 import { bugun, para, trh, uid } from "../lib/format";
 import { kalanEtiket, yaklasanOdemeler } from "../lib/hatirlatici";
-import { Alan, Baslik, Bos, Btn, Card, SilBtn, inp } from "./ui";
+import { Alan, Baslik, Bos, Btn, Card, Cubuk, SilBtn, inp } from "./ui";
 
 type Props = { db: Db; setDb: (u: (d: Db) => Db) => void };
 const AY_AD = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
 const GUN_AD = ["Pt", "Sa", "Ça", "Pe", "Cu", "Ct", "Pz"];
+
+/** Bir günün/ayın plan tamamlanma özeti */
+function planOzet(liste: Plan[]) {
+  const toplam = liste.length;
+  const biten = liste.filter((p) => p.done).length;
+  return { toplam, biten, yuzde: toplam ? Math.round((biten / toplam) * 100) : 0 };
+}
+
+/** Tek plan satırı: ✓ tamamla (geri alınabilir) + sil */
+function PlanSatir({
+  p, tikla, sil, sinif = "border-b border-slate-100 py-2 text-sm"
+}: { p: Plan; tikla: () => void; sil: () => void; sinif?: string }) {
+  return (
+    <div className={`flex items-center gap-2 ${sinif}`}>
+      <button
+        type="button"
+        onClick={tikla}
+        aria-pressed={!!p.done}
+        aria-label={p.done ? "Tamamlandı işaretini kaldır" : "Tamamlandı olarak işaretle"}
+        title={p.done ? "Tamamlandı — tıklayınca geri alınır" : "Tamamlandı olarak işaretle"}
+        className={`grid h-[18px] w-[18px] shrink-0 place-items-center rounded-md border text-[11px] leading-none transition ${
+          p.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white text-transparent hover:border-slate-900"
+        }`}
+      >
+        ✓
+      </button>
+      <span className={`min-w-0 flex-1 ${p.done ? "text-slate-400 line-through" : ""}`}>
+        {p.saat ? <b>{p.saat} </b> : null}
+        {p.text}
+      </span>
+      <SilBtn onClick={sil} />
+    </div>
+  );
+}
+
+/** "3/5 tamamlandı · %60" + ilerleme çubuğu */
+function PlanIlerleme({ ozet, sag = true }: { ozet: { toplam: number; biten: number; yuzde: number }; sag?: boolean }) {
+  if (!ozet.toplam) return null;
+  return (
+    <div className="mb-2">
+      {sag && (
+        <div className="mb-1 flex items-center justify-between text-[11px]">
+          <span className={ozet.biten === ozet.toplam ? "font-medium text-emerald-600" : "text-slate-500"}>
+            {ozet.biten}/{ozet.toplam} tamamlandı
+          </span>
+          <span className={ozet.yuzde === 100 ? "font-medium text-emerald-600" : "text-slate-400"}>%{ozet.yuzde}</span>
+        </div>
+      )}
+      <Cubuk yuzde={ozet.yuzde} ton={ozet.yuzde === 100 ? "" : "uyari"} />
+    </div>
+  );
+}
 
 export function ZamanView({ db, setDb }: Props) {
   const simdi = new Date();
@@ -46,6 +98,12 @@ export function ZamanView({ db, setDb }: Props) {
   };
 
   const silPlan = (id: string) => setDb((d) => ({ ...d, plans: d.plans.filter((x) => x.id !== id) }));
+  /** Planı tamamlandı / tamamlanmadı yapar (tek tuş, geri alınabilir) */
+  const planTikla = (id: string) =>
+    setDb((d) => ({ ...d, plans: d.plans.map((x) => (x.id === id ? { ...x, done: !x.done } : x)) }));
+  const planBiten = (t: string) => db.plans.filter((p) => p.date === t && p.done).length;
+  const gunOzet = planOzet(gunPlan);
+  const ayOzet = planOzet(db.plans.filter((p) => p.date.startsWith(`${yil}-${pad(ay + 1)}-`)));
 
   const SAATLER = Array.from({ length: 18 }).map((_, i) => pad(i + 6));
   const saatlik: Record<string, typeof db.plans> = {};
@@ -95,7 +153,7 @@ export function ZamanView({ db, setDb }: Props) {
         {s > 0 && (
           <div className="mt-1 flex gap-0.5">
             {Array.from({ length: Math.min(s, 4) }).map((_, i) => (
-              <span key={i} className={`h-1.5 w-1.5 rounded-full ${t === bugun() ? "bg-white" : "bg-blue-600"}`} />
+              <span key={i} className={`h-1.5 w-1.5 rounded-full ${t === bugun() ? "bg-white" : planBiten(t) >= s ? "bg-emerald-500" : "bg-blue-600"}`} />
             ))}
           </div>
         )}
@@ -108,6 +166,7 @@ export function ZamanView({ db, setDb }: Props) {
   const takvimOdemeler = yaklasanOdemeler(db, 200, 200).filter((o) => o.tarih.startsWith(ayTakvim));
   const takvimSay = (t: string) => ({
     plan: db.plans.filter((p) => p.date === t).length,
+    planBiten: db.plans.filter((p) => p.date === t && p.done).length,
     gorev: db.tasks.filter((g) => g.tarih === t && !g.done).length,
     odeme: takvimOdemeler.filter((o) => o.tarih === t).length,
     kilo: db.weights.filter((w) => w.date === t).length,
@@ -137,7 +196,14 @@ export function ZamanView({ db, setDb }: Props) {
           {toplam > 0 && <span className={`text-[10px] ${bugunMu ? "text-slate-300" : "text-slate-400"}`}>{toplam}</span>}
         </div>
         <div className="mt-1 flex flex-wrap gap-0.5 text-[11px] leading-none">
-          {s.plan > 0 && <span title={`${s.plan} plan`}>📅</span>}
+          {s.plan > 0 && (
+            <span
+              title={s.planBiten ? `${s.planBiten}/${s.plan} plan tamamlandı` : `${s.plan} plan`}
+              className={s.planBiten >= s.plan ? "font-medium text-emerald-600" : s.planBiten > 0 ? "text-emerald-700" : ""}
+            >
+              📅{s.planBiten > 0 ? ` ${s.planBiten}/${s.plan}` : ""}
+            </span>
+          )}
           {s.gorev > 0 && <span title={`${s.gorev} görev`}>✅</span>}
           {s.odeme > 0 && <span title={`${s.odeme} ödeme`}>💰</span>}
           {s.kilo > 0 && <span title={`${s.kilo} kilo kaydı`}>⚖️</span>}
@@ -179,7 +245,10 @@ export function ZamanView({ db, setDb }: Props) {
         </div>
       </Card>
       <Card className="lg:col-span-2">
-        <Baslik>{trh(secili)} Planları</Baslik>
+        <Baslik sag={gunOzet.toplam ? <span className="text-xs font-normal text-slate-500">{gunOzet.biten}/{gunOzet.toplam} ✓</span> : null}>
+          {trh(secili)} Planları
+        </Baslik>
+        <PlanIlerleme ozet={gunOzet} />
         <div className="grid grid-cols-[110px_1fr_auto] gap-2">
           <input type="time" className={inp} value={saat} onChange={(e) => setSaat(e.target.value)} title="Saat (boş bırakılabilir)" />
           <input className={inp} value={metin} onChange={(e) => setMetin(e.target.value)} placeholder="örn: 10:00 Doktor"
@@ -188,10 +257,7 @@ export function ZamanView({ db, setDb }: Props) {
         </div>
         <div className="mt-2">
           {gunPlan.length === 0 ? <Bos yazi="Bu gün plan yok." /> : gunPlan.map((p) => (
-            <div key={p.id} className="flex items-center justify-between border-b border-slate-100 py-2 text-sm">
-              <span>{p.saat ? <b>{p.saat} </b> : ""}{p.text}</span>
-              <SilBtn onClick={() => silPlan(p.id)} />
-            </div>
+            <PlanSatir key={p.id} p={p} tikla={() => planTikla(p.id)} sil={() => silPlan(p.id)} />
           ))}
         </div>
       </Card>
@@ -210,26 +276,26 @@ export function ZamanView({ db, setDb }: Props) {
             <Btn onClick={() => ekle()}><Plus size={15} /></Btn>
           </div>
           <div className="mt-3">
-            <b className="text-[13px]">Gün boyu</b>
+            <div className="flex items-center justify-between">
+              <b className="text-[13px]">Gün boyu</b>
+              <span className="text-[11px] text-slate-500">{planOzet(gunBoyu).biten}/{planOzet(gunBoyu).toplam} ✓</span>
+            </div>
             {gunBoyu.length === 0 ? <div className="text-xs text-slate-400">Yok.</div> : gunBoyu.map((p) => (
-              <div key={p.id} className="flex items-center justify-between border-b border-slate-100 py-1.5 text-[13px]">
-                <span>{p.text}</span>
-                <SilBtn onClick={() => silPlan(p.id)} />
-              </div>
+              <PlanSatir key={p.id} p={p} sinif="py-1.5 text-[13px]" tikla={() => planTikla(p.id)} sil={() => silPlan(p.id)} />
             ))}
           </div>
         </Card>
         <Card className="lg:col-span-2">
-          <Baslik>{trh(secili)} • Saat saat</Baslik>
+          <Baslik sag={<span className="text-xs font-normal text-slate-500">{gunOzet.biten}/{gunOzet.toplam} ✓ · %{gunOzet.yuzde}</span>}>
+            {trh(secili)} • Saat saat
+          </Baslik>
+          <PlanIlerleme ozet={gunOzet} sag={false} />
           {SAATLER.map((h) => (
             <div key={h} className="flex items-start gap-2 border-b border-slate-100 py-1.5 text-sm">
               <span className="w-12 shrink-0 pt-1 font-semibold text-slate-500">{h}:00</span>
               <div className="flex-1 space-y-1">
                 {saatlik[h].length === 0 ? <span className="text-xs text-slate-300">—</span> : saatlik[h].map((p) => (
-                  <div key={p.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-2 py-1 text-[13px]">
-                    <span><b>{p.saat}</b> {p.text}</span>
-                    <SilBtn onClick={() => silPlan(p.id)} />
-                  </div>
+                  <PlanSatir key={p.id} p={p} sinif="rounded-lg bg-slate-50 px-2 py-1 text-[13px]" tikla={() => planTikla(p.id)} sil={() => silPlan(p.id)} />
                 ))}
               </div>
               <button className="shrink-0 pt-1 text-xs text-blue-600 hover:underline" onClick={() => setSaat(h + ":00")}>+ Ekle</button>
@@ -252,11 +318,30 @@ export function ZamanView({ db, setDb }: Props) {
               <button className="w-full text-left" onClick={() => setSecili(t)}>
                 <div className="text-[11px] text-slate-400">{GUN_AD[i]}</div>
                 <b className="text-sm">{t.slice(8)}.{t.slice(5, 7)}</b>
+                {planOzet(gunlere[t] || []).toplam > 0 && (() => {
+                  const o = planOzet(gunlere[t] || []);
+                  return (
+                    <div className={`text-[10px] ${o.biten === o.toplam ? "font-medium text-emerald-600" : "text-slate-400"}`}>
+                      {o.biten}/{o.toplam} ✓
+                    </div>
+                  );
+                })()}
               </button>
               <div className="mt-1 space-y-1">
                 {(gunlere[t] || []).length === 0 ? <div className="text-[11px] text-slate-300">—</div> :
                   (gunlere[t] || []).map((p) => (
-                    <div key={p.id} className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px]">{p.saat ? <b>{p.saat} </b> : ""}{p.text}</div>
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => planTikla(p.id)}
+                      title={p.done ? "Tamamlandı — tıklayınca geri alınır" : "Tamamlandı olarak işaretle"}
+                      className={`flex w-full items-start gap-1 rounded px-1.5 py-0.5 text-left text-[11px] transition ${
+                        p.done ? "bg-emerald-50 text-slate-400 line-through" : "bg-slate-100 hover:bg-slate-200"
+                      }`}
+                    >
+                      <span className={`shrink-0 ${p.done ? "text-emerald-600" : "text-slate-300"}`}>{p.done ? "☑" : "☐"}</span>
+                      <span className="min-w-0 flex-1">{p.saat ? <b>{p.saat} </b> : null}{p.text}</span>
+                    </button>
                   ))}
               </div>
               <button className="mt-1 text-[11px] text-blue-600 hover:underline" onClick={() => { setSecili(t); setMod("gunluk"); }}>Aç →</button>
@@ -273,22 +358,32 @@ export function ZamanView({ db, setDb }: Props) {
           <b>{AY_AD[ay]} {yil} Özeti</b>
           <Btn kucuk ghost onClick={ayIleri}>→</Btn>
         </div>
-        <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
           <div className="rounded-xl bg-slate-50 p-3"><div className="text-xl font-bold">{ayTop}</div><div className="text-xs text-slate-500">Toplam plan</div></div>
           <div className="rounded-xl bg-slate-50 p-3"><div className="text-xl font-bold">{ayListesi.length}</div><div className="text-xs text-slate-500">Planlı gün</div></div>
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className={`text-xl font-bold ${ayOzet.biten === ayOzet.toplam ? "text-emerald-600" : ""}`}>{ayOzet.biten}</div>
+            <div className="text-xs text-slate-500">Tamamlanan · %{ayOzet.yuzde}</div>
+          </div>
           <div className="rounded-xl bg-slate-50 p-3"><div className="text-base font-bold">{ayListesi.length ? trh(ayListesi[0][0]) : "—"}</div><div className="text-xs text-slate-500">En yoğun gün</div></div>
         </div>
-        <div className="mt-2">
-          {ayListesi.length === 0 ? <Bos yazi="Bu ay plan yok." /> : ayListesi.map(([t, n]) => (
+        <div className="my-2">
+          <PlanIlerleme ozet={ayOzet} />
+        </div>
+        <div>
+          {ayListesi.length === 0 ? <Bos yazi="Bu ay plan yok." /> : ayListesi.map(([t, n]) => {
+            const o = planOzet(db.plans.filter((p) => p.date === t));
+            return (
             <div key={t} className="flex items-center gap-2 border-b border-slate-100 py-1.5 text-sm">
               <span className="w-24 shrink-0">{trh(t)}</span>
               <div className="h-2 flex-1 overflow-hidden rounded bg-slate-100">
-                <div className="h-full bg-slate-900" style={{ width: `${Math.round((n / enCok) * 100)}%` }} />
+                <div className={`h-full transition-all ${o.biten === o.toplam ? "bg-emerald-500" : "bg-slate-900"}`} style={{ width: `${Math.round((n / enCok) * 100)}%` }} />
               </div>
-              <b className="w-6 text-right">{n}</b>
+              <b className={`w-12 shrink-0 text-right text-[13px] ${o.biten === o.toplam ? "text-emerald-600" : ""}`}>{o.biten}/{n}</b>
               <button className="shrink-0 text-xs text-blue-600 hover:underline" onClick={() => { setSecili(t); setMod("gunluk"); }}>Aç →</button>
             </div>
-          ))}
+            );
+          })}
         </div>
       </Card>
       )}
@@ -326,7 +421,16 @@ export function ZamanView({ db, setDb }: Props) {
           ) : (
             <div className="space-y-1 text-[13px]">
               {db.plans.filter((p) => p.date === secili).map((p) => (
-                <div key={`tp${p.id}`}>📅 {p.saat ? <b>{p.saat} </b> : null}{p.text}</div>
+                <button
+                  key={`tp${p.id}`}
+                  type="button"
+                  onClick={() => planTikla(p.id)}
+                  title={p.done ? "Tamamlandı — tıklayınca geri alınır" : "Tamamlandı olarak işaretle"}
+                  className={`flex w-full items-start gap-1.5 text-left ${p.done ? "text-slate-400 line-through" : ""}`}
+                >
+                  <span className={`shrink-0 ${p.done ? "text-emerald-600" : "text-slate-400"}`}>{p.done ? "✅" : "⬜"}</span>
+                  <span className="min-w-0 flex-1">{p.saat ? <b>{p.saat} </b> : null}{p.text}</span>
+                </button>
               ))}
               {db.tasks.filter((g) => g.tarih === secili).map((g) => (
                 <div key={`tg${g.id}`}>✅ {g.done ? <s className="text-slate-400">{g.text}</s> : g.text}</div>
