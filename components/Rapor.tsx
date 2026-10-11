@@ -260,32 +260,102 @@ export function RaporView({ db, setDb, replaceAll, anahtar }: Props & { anahtar:
       </Card>
 
       <Card>
-        <Baslik>🗂 Defter Yönetimi <span className="text-xs font-normal text-slate-400">• silme yalnızca burada</span></Baslik>
+        <Baslik>🗂 Defter Yönetimi <span className="text-xs font-normal text-slate-400">• gizleme ve silme yalnızca burada</span></Baslik>
         <p className="mb-3 text-xs text-slate-500">
-          Defter silmek <b>yalnızca bu bölümden</b> yapılır — Finans ekranındaki “⋯ Defter işlemleri”
-          menüsünde silme yoktur. Yanlışlıkla silmeye karşı defter adını yazman gerekir.
+          Defter <b>gizleme</b> ve <b>silme</b> işlemleri yalnızca bu bölümden yapılır — Finans ekranındaki
+          “⋯ Defter işlemleri” menüsünde bu işlemler yoktur. Gizleme verileri silmez, sadece
+          listelerden kaldırır. Silme ise defter adını yazmanı gerektirir.
         </p>
         <div className="space-y-2">
           {db.ledgers.map((d) => {
-            const hSay = db.accounts.filter((a) => a.ledger_id === d.id).length;
+            const hesapList = db.accounts.filter((a) => a.ledger_id === d.id);
+            const hSay = hesapList.length;
             const tSay = db.transactions.filter((t) => t.ledger_id === d.id).length;
+            const gizliSay = hesapList.filter((a) => a.gizli).length;
+            const gizliHesapVar = gizliSay > 0;
+            const tekGorunurDefter = db.ledgers.filter((z) => !z.gizli).length <= 1 && !d.gizli;
             return (
-              <div key={d.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: d.color }} />
-                <b className="min-w-0 flex-1 truncate text-sm">{d.name}</b>
-                {d.id === db.aktif && (
-                  <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-medium text-white">Aktif</span>
+              <div key={d.id} className={`rounded-xl border px-3 py-2.5 ${d.gizli ? "border-slate-200 bg-slate-50" : "border-slate-200"}`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: d.color }} />
+                  <b className="min-w-0 flex-1 truncate text-sm">
+                    {d.name}
+                    {d.gizli && <span className="ml-2 text-[11px] font-normal text-slate-400">🙈 gizli</span>}
+                  </b>
+                  {d.id === db.aktif && (
+                    <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-medium text-white">Aktif</span>
+                  )}
+                  <span className="text-[11px] text-slate-500">
+                    {hSay} hesap{gizliSay > 0 ? ` (${gizliSay} gizli)` : ""} · {tSay} işlem
+                  </span>
+                  <Btn
+                    kucuk
+                    disabled={tekGorunurDefter}
+                    title={
+                      tekGorunurDefter
+                        ? "Son görünür defter gizlenemez"
+                        : d.gizli ? "Defteri göster" : "Defteri gizle (veriler silinmez)"
+                    }
+                    onClick={() =>
+                      setDb((prev) => {
+                        const kalan = prev.ledgers.filter((z) => z.id !== d.id && !z.gizli);
+                        return {
+                          ...prev,
+                          ledgers: prev.ledgers.map((z) => (z.id === d.id ? { ...z, gizli: !z.gizli } : z)),
+                          aktif: !d.gizli && prev.aktif === d.id ? (kalan[0]?.id ?? prev.aktif) : prev.aktif
+                        };
+                      })
+                    }
+                  >
+                    {d.gizli ? "👁 Göster" : "🙈 Gizle"}
+                  </Btn>
+                  <Btn
+                    kucuk
+                    tehlike
+                    disabled={db.ledgers.length <= 1}
+                    title={db.ledgers.length <= 1 ? "Son defter silinemez" : "Bu defteri sil"}
+                    onClick={() => { setSilYazi(""); setSilDefterId(d.id); }}
+                  >
+                    🗑 Sil
+                  </Btn>
+                </div>
+
+                {/* HESAP YÖNETİMİ */}
+                {hesapList.length > 0 && (
+                  <div className="mt-2 border-t border-slate-100 pt-2">
+                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Hesaplar
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {hesapList.map((a) => (
+                        <button
+                          key={a.id}
+                          onClick={() =>
+                            setDb((prev) => ({
+                              ...prev,
+                              accounts: prev.accounts.map((x) => (x.id === a.id ? { ...x, gizli: !x.gizli } : x))
+                            }))
+                          }
+                          title={a.gizli ? "Hesabı göster" : "Hesabı gizle (veriler silinmez)"}
+                          className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-medium transition ${
+                            a.gizli
+                              ? "border-slate-200 bg-white text-slate-400 line-through hover:border-slate-400 hover:text-slate-700"
+                              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          <span className="shrink-0">{a.gizli ? "🙈" : "👁"}</span>
+                          <span className="max-w-[150px] truncate">{a.name}</span>
+                          {a.paneldeGizle && <span title="Genel Bakış'ta gizli" className="text-[10px]">👤</span>}
+                        </button>
+                      ))}
+                    </div>
+                    {gizliHesapVar && (
+                      <p className="mt-1 text-[10px] text-slate-400">
+                        {gizliSay} gizli hesap var — listeden kaldırıldı, verileri duruyor.
+                      </p>
+                    )}
+                  </div>
                 )}
-                <span className="text-[11px] text-slate-500">{hSay} hesap · {tSay} işlem</span>
-                <Btn
-                  kucuk
-                  tehlike
-                  disabled={db.ledgers.length <= 1}
-                  title={db.ledgers.length <= 1 ? "Son defter silinemez" : "Bu defteri sil"}
-                  onClick={() => { setSilYazi(""); setSilDefterId(d.id); }}
-                >
-                  🗑 Sil
-                </Btn>
               </div>
             );
           })}

@@ -24,8 +24,10 @@ export type Account = {
   vadeFark: number;
   /** Base44: cari hesapta vade / ödeme günü (ayın 1-31'i) */
   vadeGun?: number;
-  /** Base44: bu hesap Genel Bakış panelinde gösterilmesin */
+  /** bu hesap Genel Bakış panelinde gösterilmesin */
   paneldeGizle?: boolean;
+  /** hesap tamamen gizlendi (Finans listesinde de görünmez; Ayarlar'dan geri gelir) */
+  gizli?: boolean;
 };
 export type TxType = "income" | "expense" | "transfer";
 export type DocType = "yok" | "cek" | "fatura";

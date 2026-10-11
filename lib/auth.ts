@@ -2,6 +2,8 @@
 // Hiçbir veri dışarı gönderilmez; "şifremi unuttum" kayıt olurken belirlenen
 // güvenlik sorusuyla çalışır (e-posta gönderimi yerel uygulamada mümkün değildir).
 
+import { dosyaKullanicilarOku, dosyaKullanicilarYaz } from "./elektron";
+
 export type Kullanici = {
   ad: string;
   eposta: string;
@@ -15,6 +17,12 @@ const KULLANICILAR = "hp-users";
 const OTURUM = "hp-session";
 const TUZ = "hesap-planim-v1::";
 
+// Kullanıcı listesi hem localStorage'da hem de kalıcı dosyada tutulur.
+// localStorage origin'e bağlıdır (file:// / app:// / http://localhost:3000
+// ayrı depolardır); dosya ise her durumda aynı yerde durur. Bu yüzden
+// "e-posta kayıtlı değil" hatası bir daha oluşmaz.
+let onbellek: Kullanici[] | null = null;
+
 async function sha256(metin: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(TUZ + metin));
   return Array.from(new Uint8Array(buf))
@@ -26,17 +34,43 @@ export function epostaGecerli(e: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
 }
 
-function oku(): Kullanici[] {
+function parca(cozdur: string | null): Kullanici[] | null {
+  if (!cozdur) return null;
   try {
-    const v = JSON.parse(localStorage.getItem(KULLANICILAR) || "[]");
-    return Array.isArray(v) ? v : [];
+    const v = JSON.parse(cozdur);
+    return Array.isArray(v) ? (v as Kullanici[]) : null;
   } catch {
-    return [];
+    return null;
   }
 }
 
-function yaz(liste: Kullanici[]) {
-  localStorage.setItem(KULLANICILAR, JSON.stringify(liste));
+/** Uygulama açılışında bir kez çağrılır: iki depo birleştirilir.
+ *  Daha çok hesabı olan depo kazanır; hiçbiri yoksa boş liste. */
+export async function kullanicilariYukle(): Promise<void> {
+  const yerel = parca(localStorage.getItem(KULLANICILAR));
+  const dosya = parca(await dosyaKullanicilarOku());
+  if (dosya && (!yerel || dosya.length > yerel.length)) {
+    onbellek = dosya;
+    try { localStorage.setItem(KULLANICILAR, JSON.stringify(dosya)); } catch { /* */ }
+  } else if (yerel && yerel.length > 0) {
+    onbellek = yerel;
+    if (!dosya) await dosyaKullanicilarYaz(JSON.stringify(yerel));
+  } else {
+    onbellek = [];
+  }
+}
+
+function oku(): Kullanici[] {
+  if (onbellek) return onbellek;
+  const yerel = parca(localStorage.getItem(KULLANICILAR));
+  onbellek = yerel ?? [];
+  return onbellek;
+}
+
+async function yaz(liste: Kullanici[]) {
+  onbellek = liste;
+  try { localStorage.setItem(KULLANICILAR, JSON.stringify(liste)); } catch { /* */ }
+  await dosyaKullanicilarYaz(JSON.stringify(liste));
 }
 
 const norm = (e: string) => e.trim().toLocaleLowerCase("tr");
@@ -60,7 +94,7 @@ export async function kayitOl(ad: string, eposta: string, parola: string, soru: 
     cevap: await sha256("cevap:" + eposta + ":" + cevap.trim().toLocaleLowerCase("tr")),
     olusturma: new Date().toISOString()
   });
-  yaz(liste);
+  await yaz(liste);
   localStorage.setItem(OTURUM, eposta);
   return null;
 }
@@ -112,7 +146,7 @@ export async function sifirla(eposta: string, cevap: string, yeni: string): Prom
   const ozet = await sha256("cevap:" + eposta + ":" + cevap.trim().toLocaleLowerCase("tr"));
   if (ozet !== k.cevap) return "Güvenlik cevabı hatalı.";
   k.parola = await sha256("pw:" + eposta + ":" + yeni);
-  yaz(liste);
+  await yaz(liste);
   localStorage.setItem(OTURUM, eposta);
   return null;
 }

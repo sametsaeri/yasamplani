@@ -210,24 +210,42 @@ export function KullaniciPaneli({
                 Defter · {db.ledgers.length}
               </div>
               {db.ledgers.map((d) => (
-                <button
-                  key={d.id}
-                  onClick={() => { setAktif(d.id); setAcik(false); }}
-                  title={d.aciklama || d.name}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition hover:bg-slate-50"
-                >
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: d.color }} />
-                  <span className={`min-w-0 flex-1 truncate ${d.id === db.aktif ? "font-semibold text-slate-900" : ""}`}>{d.name}</span>
-                  {d.gizli && <span className="text-[10px]">🙈</span>}
-                  {d.paraBirimi && <span className="shrink-0 text-[11px] text-slate-400">{d.paraBirimi}</span>}
-                  {d.id === db.aktif && <span className="shrink-0 text-[11px] font-bold text-slate-900">✓</span>}
-                </button>
+                <div key={d.id} className="flex items-center">
+                  <button
+                    onClick={() => { setAktif(d.id); setAcik(false); }}
+                    title={d.aciklama || d.name}
+                    className={`flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 text-left text-[13px] transition hover:bg-slate-50 ${d.gizli ? "opacity-50" : ""}`}
+                  >
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: d.color }} />
+                    <span className={`min-w-0 flex-1 truncate ${d.id === db.aktif ? "font-semibold text-slate-900" : ""}`}>{d.name}</span>
+                    {d.gizli && <span className="text-[10px]">🙈</span>}
+                    {d.paraBirimi && <span className="shrink-0 text-[11px] text-slate-400">{d.paraBirimi}</span>}
+                    {d.id === db.aktif && <span className="shrink-0 text-[11px] font-bold text-slate-900">✓</span>}
+                  </button>
+                  <button
+                    onClick={() =>
+                      setDb((prev) => {
+                        const kalan = prev.ledgers.filter((z) => z.id !== d.id && !z.gizli);
+                        if (kalan.length === 0 && !d.gizli) return prev; // son görünür defter gizlenemez
+                        return {
+                          ...prev,
+                          ledgers: prev.ledgers.map((z) => (z.id === d.id ? { ...z, gizli: !z.gizli } : z)),
+                          aktif: !d.gizli && prev.aktif === d.id ? (kalan[0]?.id ?? prev.aktif) : prev.aktif
+                        };
+                      })
+                    }
+                    title={d.gizli ? "Defteri göster" : "Defteri gizle"}
+                    className="shrink-0 px-2 text-[12px] text-slate-300 transition hover:text-amber-600"
+                  >
+                    {d.gizli ? "👁" : "🙈"}
+                  </button>
+                </div>
               ))}
               <button
-                onClick={() => { setAcik(false); setView("finans"); }}
+                onClick={() => { setAcik(false); setView("rapor"); }}
                 className="mt-1 flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[12px] font-medium text-slate-600 transition hover:bg-slate-50"
               >
-                <Plus size={13} /> Defter yönetimi (yeni, sil, gizle)
+                <Plus size={13} /> Defter yönetimi (gizle, sil, hesaplar)
               </button>
             </div>
 

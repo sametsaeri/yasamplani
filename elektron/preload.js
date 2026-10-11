@@ -6,5 +6,7 @@ contextBridge.exposeInMainWorld("elektron", {
   yedekListe: () => ipcRenderer.invoke("yedek-listele"),
   yedekOku: (ad) => ipcRenderer.invoke("yedek-oku", ad),
   veriYaz: (icerik) => ipcRenderer.invoke("veri-yaz", icerik),
-  veriOku: () => ipcRenderer.invoke("veri-oku")
+  veriOku: () => ipcRenderer.invoke("veri-oku"),
+  kullanicilarYaz: (icerik) => ipcRenderer.invoke("kullanicilar-yaz", icerik),
+  kullanicilarOku: () => ipcRenderer.invoke("kullanicilar-oku")
 });

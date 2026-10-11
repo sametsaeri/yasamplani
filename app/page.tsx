@@ -12,7 +12,7 @@ import type { Db } from "../lib/store";
 import { useDb } from "../lib/store";
 import { ayToplam, defterOzet } from "../lib/finance";
 import { buAy, bugun, para, trh } from "../lib/format";
-import { cikis, giris, kullaniciAd, oturum, veriAnahtari } from "../lib/auth";
+import { cikis, giris, kullaniciAd, kullanicilariYukle, oturum, veriAnahtari } from "../lib/auth";
 import { otoYedekle } from "../lib/yedek";
 import { diskYedekYaz } from "../lib/elektron";
 import { Btn, Card, KullaniciPaneli, Stat } from "../components/ui";
@@ -501,8 +501,12 @@ export default function Home() {
   const [hazir, setHazir] = useState(false);
 
   useEffect(() => {
-    setEposta(oturum());
-    setHazir(true);
+    // Hesap listesi hem tarayıcı deposunda hem kalıcı dosyada durur;
+    // ikisi birleştirilmeden oturum kontrolü yapılmaz.
+    void kullanicilariYukle().finally(() => {
+      setEposta(oturum());
+      setHazir(true);
+    });
   }, []);
 
   if (!hazir) return <div className="flex min-h-screen items-center justify-center bg-slate-900 text-sm text-slate-300">Yükleniyor...</div>;

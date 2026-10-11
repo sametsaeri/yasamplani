@@ -1,43 +1,19 @@
 // Hesap Planım - Masaüstü (Electron) ana işlemi.
-const { app, BrowserWindow, ipcMain, protocol, net } = require("electron");
+const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
 const fs = require("fs");
-const { pathToFileURL, URL } = require("url");
 
 // Windows 10+ masaüstü bildirimleri için uygulama kimliği (ödeme hatırlatıcıları)
 app.setAppUserModelId("com.hesapplanim.app");
 
-// "app://" protokolü: statik çıktıyı kök dizinden servis eder. file:// yerine
-// bunu kullanıyoruz çünkü file:// altında mutlak yollar (/_next/...) disk
-// kökünde aranıyor ve sayfa "Yükleniyor..."de takılı kalıyordu.
-protocol.registerSchemesAsPrivileged([
-  { scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } }
-]);
+// DİKKAT: Sayfa file:// ile açılır. Değiştirme!
+// Chromium localStorage'i origin'e göre ayırır; app:// gibi özel bir
+// şemaya geçmek kullanıcı listesini (hp-users) ve verileri yeni bir depoya
+// taşır, kullanıcı "e-posta kayıtlı değil" hatasıyla karşılaşır.
+// Mutlak yol sorunu next.config.mjs içindeki `assetPrefix: "./"` ile çözülür.
 
 let pencere = null;
 const AZAMI_DOSYA = 10;
-
-function kokDizini() {
-  return path.join(__dirname, "..", "out");
-}
-
-function appProtocolKur() {
-  protocol.handle("app", (istek) => {
-    let yol = decodeURIComponent(new URL(istek.url).pathname);
-    if (!yol || yol === "/") yol = "/index.html";
-    // dizin dışına çıkışı engelle (path traversal koruması)
-    const tam = path.normalize(path.join(kokDizini(), yol));
-    if (!tam.startsWith(path.normalize(kokDizini()))) {
-      return new Response("Yasak", { status: 403 });
-    }
-    let hedef = tam;
-    if (!fs.existsSync(hedef) || fs.statSync(hedef).isDirectory()) {
-      const html = path.join(tam, "index.html");
-      hedef = fs.existsSync(html) ? html : path.join(kokDizini(), "404.html");
-    }
-    return net.fetch(pathToFileURL(hedef).toString());
-  });
-}
 
 function yedekKlasor() {
   const k = path.join(app.getPath("userData"), "yedekler");
@@ -98,6 +74,37 @@ ipcMain.handle("veri-oku", () => {
   return null;
 });
 
+// --- Hesap kayıtları (D3) ---
+// Kullanıcı listesi (e-posta + şifre özeti + güvenlik sorusu) yalnızca
+// localStorage'da tutuluyordu. localStorage origin'e bağlı olduğu için şema
+// (file:// -> app://) değişince hesap kaydı "kayıtlı değil" diyerek kayboluyordu.
+// Artık kalıcı dosyada da tutulur; iki depo birlikte okunur.
+function kullanicilarDosyasi() {
+  return path.join(app.getPath("userData"), "hesap-planim-kullanicilar.json");
+}
+
+ipcMain.handle("kullanicilar-oku", () => {
+  try {
+    const hedef = kullanicilarDosyasi();
+    if (fs.existsSync(hedef)) return fs.readFileSync(hedef, "utf8");
+  } catch {
+    /* bozuk dosya → null */
+  }
+  return null;
+});
+
+ipcMain.handle("kullanicilar-yaz", (_olay, icerik) => {
+  try {
+    const hedef = kullanicilarDosyasi();
+    const gecici = hedef + ".tmp";
+    fs.writeFileSync(gecici, String(icerik || "[]"), "utf8");
+    fs.renameSync(gecici, hedef); // atomik
+    return true;
+  } catch {
+    return false;
+  }
+});
+
 function ac() {
   pencere = new BrowserWindow({
     width: 1360,
@@ -112,14 +119,12 @@ function ac() {
   if (process.env.ELECTRON_DEV) {
     pencere.loadURL("http://localhost:3000");
   } else {
-    pencere.loadURL("app://masaustu/index.html");
+    // file:// — orijinal origin, localStorage ve kullanıcı listesi korunur
+    pencere.loadFile(path.join(__dirname, "..", "out", "index.html"));
   }
 }
 
-app.whenReady().then(() => {
-  if (!process.env.ELECTRON_DEV) appProtocolKur();
-  ac();
-});
+app.whenReady().then(ac);
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });

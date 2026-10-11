@@ -7,6 +7,8 @@ type ElektronApi = {
   yedekOku: (ad: string) => Promise<string>;
   veriYaz: (icerik: string) => Promise<boolean>;
   veriOku: () => Promise<string | null>;
+  kullanicilarYaz: (icerik: string) => Promise<boolean>;
+  kullanicilarOku: () => Promise<string | null>;
 };
 
 declare global {
@@ -56,6 +58,26 @@ export async function dosyaVeriOku(): Promise<string | null> {
   if (!elektronVar()) return null;
   try {
     return await window.elektron!.veriOku();
+  } catch {
+    return null;
+  }
+}
+
+/** Hesap kayıtları dosyası: localStorage origin'e bağlı olduğu için
+ *  kullanıcı listesi de kalıcı diskte tutulur (şema değişse de kayıt kalır). */
+export async function dosyaKullanicilarYaz(icerik: string): Promise<boolean> {
+  if (!elektronVar()) return false;
+  try {
+    return await window.elektron!.kullanicilarYaz(icerik);
+  } catch {
+    return false;
+  }
+}
+
+export async function dosyaKullanicilarOku(): Promise<string | null> {
+  if (!elektronVar()) return null;
+  try {
+    return await window.elektron!.kullanicilarOku();
   } catch {
     return null;
   }

@@ -58,6 +58,11 @@ export default function Finans({ db, setDb }: Props) {
   const [defterPB, setDefterPB] = useState("₺");
   const [defterMenu, setDefterMenu] = useState(false);
   const [gizlileriGoster, setGizlileriGoster] = useState(false);
+  /** Gizli hesapları da listede göster (Finans ekranı) */
+  const [hesaplarGosterGizli, setHesaplarGosterGizli] = useState(false);
+  /** Ekranda gösterilecek hesaplar: gizliler toggle kapalıyken gizliler dışarıda */
+  const gorunurHesaplar = hesaplarGosterGizli ? hesaplar : hesaplar.filter((h) => !h.gizli);
+  const gizliHesapSay = hesaplar.filter((h) => h.gizli).length;
 
   const [hesapModal, setHesapModal] = useState(false);
   const [duzHesap, setDuzHesap] = useState<string | null>(null);
@@ -132,17 +137,14 @@ export default function Finans({ db, setDb }: Props) {
     setDefterForm(false);
   };
 
-  // Not: Defter silme mantığı ve onay penceresi artık Ayarlar (Rapor) bölümünde.
+  // Not: Defter gizleme/gösterme ve silme artık Ayarlar → 🗂 Defter Yönetimi'nde.
 
-  /** Base44: defteri panelden gizle (veri durur, listeden kaybolur). */
-  const defterGizle = (id: string) => {
-    if (db.ledgers.filter((z) => !z.gizli).length <= 1) return alert("Gizlenemeyecek kadar az görünür defter var.");
+  /** Hesabı gizle/göster (veriler durur, sadece listeden kalkar). */
+  const hesapGizle = (id: string) => {
     setDb((d) => ({
       ...d,
-      ledgers: d.ledgers.map((x) => (x.id === id ? { ...x, gizli: true } : x)),
-      aktif: d.aktif === id ? (d.ledgers.find((z) => z.id !== id && !z.gizli) || d.ledgers[0]).id : d.aktif
+      accounts: d.accounts.map((a) => (a.id === id ? { ...a, gizli: !a.gizli } : a))
     }));
-    setDefterMenu(false);
   };
 
   const defterGoster = (id: string) =>
@@ -566,8 +568,7 @@ export default function Finans({ db, setDb }: Props) {
             <div className="absolute left-0 top-9 z-20 w-60 rounded-xl border border-slate-200 bg-white p-1.5 text-[13px] shadow-lg">
               {[
                 { e: "✏️ Düzenle (ad / açıklama / para birimi / renk)", f: () => defterDuzenle(aktifDefter) },
-                { e: "📄 Rapor Al (CSV)", f: () => defterCsv(aktifDefter) },
-                { e: "🙈 Panelden gizle", f: () => defterGizle(aktifDefter.id) }
+                { e: "📄 Rapor Al (CSV)", f: () => defterCsv(aktifDefter) }
               ].map((o) => (
                 <button
                   key={o.e}
@@ -578,7 +579,7 @@ export default function Finans({ db, setDb }: Props) {
                 </button>
               ))}
               <div className="mt-1 border-t border-slate-100 px-2.5 py-2 text-[11px] text-slate-400">
-                Defter silmek için Ayarlar → 🗂 Defter Yönetimi
+                Gizleme ve silme için Ayarlar → 🗂 Defter Yönetimi
               </div>
             </div>
           )}
@@ -647,14 +648,25 @@ export default function Finans({ db, setDb }: Props) {
       </Card>
 
       <Card>
-        <Baslik sag={<Btn kucuk onClick={() => hesapAc()}><Plus size={14} className="mr-1 inline" /> Hesap</Btn>}>
+        <Baslik sag={
+          <div className="flex items-center gap-2">
+            {gizliHesapSay > 0 && (
+              <Btn kucuk ghost onClick={() => setHesaplarGosterGizli((v) => !v)}>
+                {hesaplarGosterGizli ? "🙈 Gizlileri gizle" : `🙈 Gizli hesaplar (${gizliHesapSay})`}
+              </Btn>
+            )}
+            <Btn kucuk onClick={() => hesapAc()}><Plus size={14} className="mr-1 inline" /> Hesap</Btn>
+          </div>
+        }>
           Hesaplar <span className="text-xs font-normal text-slate-400">• {aktifDefter.name} — tıklayıp içine gir</span>
         </Baslik>
         {hesaplar.length === 0 ? (
           <Bos yazi="Bu defterde hesap yok. + Hesap ile aç (Nakit, Banka, Kredi Kartı...)." />
+        ) : gorunurHesaplar.length === 0 ? (
+          <Bos yazi={`Bu defterdeki ${gizliHesapSay} hesap gizli. Yukarıdaki "Gizli hesaplar" düğmesiyle göster.`} />
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {hesaplar.map((h) => {
+            {gorunurHesaplar.map((h) => {
               const x = ozet.bakiyeler[h.id] || 0;
               const borc = x < 0 ? -x : 0;
               return (
@@ -664,7 +676,8 @@ export default function Finans({ db, setDb }: Props) {
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <b className="truncate">{h.name}</b>
-                        {h.paneldeGizle && <span title="Paneleden gizli">🙈</span>}
+                        {h.gizli && <span title="Gizli hesap — listede gizli">🙈</span>}
+                        {h.paneldeGizle && <span title="Paneleden gizli">👤</span>}
                       </div>
                       <div className="text-xs text-slate-500">{HESAP_TIP_AD[h.type]}</div>
                     </div>
@@ -691,6 +704,9 @@ export default function Finans({ db, setDb }: Props) {
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Btn kucuk ghost onClick={() => setInceleId(h.id)}>İncele →</Btn>
                     <DuzenleBtn onClick={() => hesapAc(h.id)} />
+                    <Btn kucuk ghost onClick={() => hesapGizle(h.id)} title={h.gizli ? "Hesabı göster" : "Hesabı gizle (listeden kaldır, veriler durur)"}>
+                      {h.gizli ? "👁 Göster" : "🙈 Gizle"}
+                    </Btn>
                     <SilBtn onClick={() => hesapSil(h.id)} />
                   </div>
                 </div>
