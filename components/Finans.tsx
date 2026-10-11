@@ -79,6 +79,19 @@ export default function Finans({ db, setDb }: Props) {
   const [inceleId, setInceleId] = useState<string | null>(null);
   /** ⋮ menüsünden açılan hesap yönetim penceresi */
   const [yonetHesapId, setYonetHesapId] = useState<string | null>(null);
+  /** Defter başındaki ⋮ menüsü: ekranda hangi bölümler görünecek */
+  const [widgetMenuu, setWidgetMenuu] = useState(false);
+
+  // Deftere özel açık paneller. Kayıt yoksa HİÇBİRİ açılmaz → ana ekran sadece
+  // hesap listesidir; kullanıcı istediğini ⋮ menüsünden ekler.
+  const aktifWidgetler = db.widgetler?.[db.aktif] ?? [];
+  const widgetAcik = (kod: string) => aktifWidgetler.includes(kod);
+  const widgetDegistir = (kod: string) =>
+    setDb((d) => {
+      const suanki = d.widgetler?.[d.aktif] ?? [];
+      const yeni = suanki.includes(kod) ? suanki.filter((x) => x !== kod) : [...suanki, kod];
+      return { ...d, widgetler: { ...(d.widgetler || {}), [d.aktif]: yeni } };
+    });
 
   const [txModal, setTxModal] = useState(false);
   const [tx, setTx] = useState<TxForm>({ ...BOS_TX, date: bugun() });
@@ -629,7 +642,25 @@ export default function Finans({ db, setDb }: Props) {
               <span className="block truncate text-[11px] text-slate-500">
                 {aktifDefter.aciklama || "Defter"}
                 {aktifDefter.paraBirimi ? ` · ${aktifDefter.paraBirimi}` : ""}
+                {aktifWidgetler.length > 0 && ` · ${aktifWidgetler.length} bölüm açık`}
               </span>
+            </div>
+            {/* ⋮ Hangi bölümler ekranda görünsün? */}
+            <div className="relative shrink-0">
+              <button
+                onClick={() => setWidgetMenuu((v) => !v)}
+                title="Ekranda gösterilecek bölümler"
+                className="rounded-lg border border-slate-200 px-2 py-1 text-[15px] leading-none text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+              >
+                ⋮
+              </button>
+              {widgetMenuu && (
+                <WidgetMenusu
+                  aktifler={aktifWidgetler}
+                  degistir={widgetDegistir}
+                  kapat={() => setWidgetMenuu(false)}
+                />
+              )}
             </div>
           </div>
           <Btn ghost kucuk onClick={() => setDefterPanel(!defterPanel)}>
@@ -724,6 +755,7 @@ export default function Finans({ db, setDb }: Props) {
         </div>
       </Card>
 
+      {widgetAcik("net") && (
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat
           ikon="💰" renk="bg-slate-100"
@@ -735,6 +767,7 @@ export default function Finans({ db, setDb }: Props) {
         <Stat ikon="📉" renk="bg-red-100" etiket="Borç" deger={pbPara(ozet.borc)} degerRenk="text-red-600" />
         <Stat ikon="📒" renk="bg-blue-100" etiket="Hesap" deger={hesaplar.length} />
       </div>
+    )}
       {aktifDefter.aciklama && (
         <p className="-mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-500">
           📝 <b className="text-slate-700">{aktifDefter.name}:</b> {aktifDefter.aciklama}
@@ -742,7 +775,8 @@ export default function Finans({ db, setDb }: Props) {
       )}
 
       {/* Base44: Bu Ay Özet — gelir (yeşil) / gider (kırmızı) yan yana çubuk */}
-      <Card>
+      {widgetAcik("ay") && (
+<Card>
         <Baslik sag={<span className="text-xs font-normal text-slate-400">{ayEtiket}</span>}>
           📊 Bu Ay Özet <span className="text-xs font-normal text-slate-400">• {aktifDefter.name}</span>
         </Baslik>
@@ -784,6 +818,7 @@ export default function Finans({ db, setDb }: Props) {
               : "Gelir girince tasarruf oranın burada görünür."}
         </p>
       </Card>
+)}
 
       <Card>
         <Baslik sag={
@@ -861,6 +896,7 @@ export default function Finans({ db, setDb }: Props) {
         )}
       </Card>
 
+      {widgetAcik("hareket") && (
       <Card>
         <Baslik sag={<Btn kucuk onClick={() => txAc()}><Plus size={14} className="mr-1 inline" /> Yeni İşlem</Btn>}>
           Gelir & Gider <span className="text-xs font-normal text-slate-400">• {aktifDefter.name}</span>
@@ -910,8 +946,10 @@ export default function Finans({ db, setDb }: Props) {
           </div>
         )}
       </Card>
+    )}
 
-      <Card>
+      {widgetAcik("odeme") && (
+<Card>
         <Baslik>🗓 Ödeme Takvimi <span className="text-xs font-normal text-slate-400">• vadeli çek/fatura ve ödenmemişler</span></Baslik>
         {vadeliler.length === 0 ? <Bos yazi="Bekleyen vade yok." /> : (
           <table className="w-full text-[13px]">
@@ -930,9 +968,11 @@ export default function Finans({ db, setDb }: Props) {
           </table>
         )}
       </Card>
+)}
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <Card>
+        {widgetAcik("butce") && (
+<Card>
           <Baslik>Bütçe <span className="text-xs font-normal text-slate-400">• {aktifDefter.name}</span></Baslik>
           <div className="grid grid-cols-3 gap-2">
             <Alan etiket="Ay"><input type="month" className={inp} value={bAy} onChange={(e) => setBAy(e.target.value)} /></Alan>
@@ -963,7 +1003,9 @@ export default function Finans({ db, setDb }: Props) {
             {butceler.length === 0 && <Bos yazi="Bütçe yok. Örnek: Market 8.000 TL." />}
           </div>
         </Card>
-        <Card>
+)}
+        {widgetAcik("hedef") && (
+<Card>
           <Baslik>Finansal Hedefler</Baslik>
           <div className="grid grid-cols-2 gap-2">
             <Alan etiket="Hedef adı"><input className={inp} value={hdAd} onChange={(e) => setHdAd(e.target.value)} placeholder="Acil durum fonu" /></Alan>
@@ -992,8 +1034,10 @@ export default function Finans({ db, setDb }: Props) {
             {db.goals.length === 0 && <Bos yazi="Hedef yok." />}
           </div>
         </Card>
+)}
 
-        <Card>
+        {widgetAcik("sablon") && (
+<Card>
           <Baslik sag={<span className="text-xs font-normal text-slate-400">• her ay tekrarlayan</span>}>🔁 Düzenli Gelir / Gider Şablonları</Baslik>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             <Alan etiket="Tür">
@@ -1038,8 +1082,10 @@ export default function Finans({ db, setDb }: Props) {
             </div>
           )}
         </Card>
+)}
 
-        <Card>
+        {widgetAcik("nakit") && (
+<Card>
           <Baslik sag={<span className="text-xs font-normal text-slate-400">• sonraki 30 gün</span>}>📈 Nakit Akış Tahmini</Baslik>
           {nakitTahmin.kalemSay === 0 && nakitTahmin.mevcut === 0 ? (
             <Bos yazi="Tahmin için şablon ekle veya vade takvimine çek/fatura kaydet." />
@@ -1065,6 +1111,7 @@ export default function Finans({ db, setDb }: Props) {
             </div>
           )}
         </Card>
+)}
       </div>
 
       <Modal acik={hesapModal} kapat={() => setHesapModal(false)} baslik={duzHesap ? "Hesabı Düzenle" : `Yeni Hesap • ${aktifDefter.name}`}>
@@ -1120,6 +1167,60 @@ export default function Finans({ db, setDb }: Props) {
 
 /** Hesap yönetim penceresi: kart üzerindeki ⋮ düğmesinden açılır.
  *  Hesap detayı, kontrol, mutabakat, gizleme ve silme tek yerde toplanır. */
+/** Finans ekranında gösterilebilen paneller. Sıra ekranda böyledir. */
+const WIDGETLAR: { kod: string; ad: string; ikon: string }[] = [
+  { kod: "net", ad: "Net Durum (varlık / borç)", ikon: "💰" },
+  { kod: "ay", ad: "Bu Ay Özeti", ikon: "📊" },
+  { kod: "hareket", ad: "Gelir / Gider Hareketleri", ikon: "💸" },
+  { kod: "odeme", ad: "Ödeme Takvimi (çek/fatura)", ikon: "🗓" },
+  { kod: "butce", ad: "Bütçe", ikon: "🎯" },
+  { kod: "hedef", ad: "Finansal Hedefler", ikon: "🏁" },
+  { kod: "sablon", ad: "Düzenli Gelir / Gider Şablonları", ikon: "🔁" },
+  { kod: "nakit", ad: "Nakit Akış Tahmini", ikon: "📈" }
+];
+
+/** Defterin ⋮ menüsü: hangi panellerin ekranda görüneceğini seçer. */
+function WidgetMenusu({ aktifler, degistir, kapat }: {
+  aktifler: string[];
+  degistir: (kod: string) => void;
+  kapat: () => void;
+}) {
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={kapat} />
+      <div className="absolute left-0 top-full z-50 mt-2 w-[290px] rounded-2xl border border-slate-200 bg-white p-2 text-left shadow-xl">
+        <div className="mb-1 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          Ekranda gösterilecek bölümler
+        </div>
+        {WIDGETLAR.map((w) => {
+          const acikMi = aktifler.includes(w.kod);
+          return (
+            <button
+              key={w.kod}
+              onClick={() => degistir(w.kod)}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left text-[13px] transition hover:bg-slate-50"
+            >
+              <span
+                className={`grid h-[18px] w-[18px] shrink-0 place-items-center rounded border text-[11px] ${
+                  acikMi ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-transparent"
+                }`}
+              >
+                ✓
+              </span>
+              <span className="shrink-0">{w.ikon}</span>
+              <span className={acikMi ? "text-slate-900" : "text-slate-400"}>{w.ad}</span>
+            </button>
+          );
+        })}
+        <p className="mt-1 border-t border-slate-100 px-2 pt-2 text-[10.5px] leading-relaxed text-slate-400">
+          Hesaplar her zaman görünür. Diğer bölümleri istediğin gibi aç/kapa — seçimin
+          deftere özel kaydedilir.
+        </p>
+      </div>
+    </>
+  );
+}
+
 function HesapYonetim({ db, setDb, hesap, kapat, duzenle, incele }: {
   db: Db; setDb: (u: (d: Db) => Db) => void; hesap: Account;
   kapat: () => void; duzenle: () => void; incele: () => void;

@@ -151,6 +151,11 @@ export type Db = {
    *  aksi halde son görev silinince liste de kayboluyordu. Eski kayıtlarda yoksa
    *  görevlerden türetilerek doldurulur. */
   listeler?: string[];
+  /** Finans ekranında defter başına açık paneller (widget).
+   *  Ana sayfada yalnızca hesaplar listesi durur; diğer bloklar defterin ⋮
+   *  menüsünden gösterilip gizlenir. Anahtar: defter id, değer: widget kodları.
+   *  Eski kayıtlarda yoksa tümü açık gelir (kullanıcı kendi düzenine göre kapatır). */
+  widgetler?: Record<string, string[]>;
   kiloHedef: { hedef: number; boy: number; tarih: string };
   ayarlar: Ayarlar;
 };
