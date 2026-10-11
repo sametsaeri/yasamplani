@@ -15,7 +15,7 @@ import { buAy, bugun, para, trh } from "../lib/format";
 import { cikis, giris, kullaniciAd, kullanicilariYukle, oturum, veriAnahtari } from "../lib/auth";
 import { otoYedekle } from "../lib/yedek";
 import { diskYedekYaz } from "../lib/elektron";
-import { Btn, Card, KullaniciPaneli, Stat } from "../components/ui";
+import { Btn, Card, KullaniciPaneli, Stat, yakinlastirmaBaslat } from "../components/ui";
 import { bugunkuOdemeler, kalanEtiket, TUR_EMOJI, TUR_ETIKET, yaklasanOdemeler } from "../lib/hatirlatici";
 
 const BASLIK: Record<View, [string, string]> = {
@@ -499,6 +499,11 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
 export default function Home() {
   const [eposta, setEposta] = useState<string | null>(null);
   const [hazir, setHazir] = useState(false);
+
+  // Kayıtlı ekran boyutu tercihini uygula (varsayılan %100)
+  useEffect(() => {
+    yakinlastirmaBaslat();
+  }, []);
 
   useEffect(() => {
     // Hesap listesi hem tarayıcı deposunda hem kalıcı dosyada durur;

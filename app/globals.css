@@ -77,8 +77,12 @@ textarea:focus-visible {
     stroke-dashoffset: 0;
   }
 }
+/* NOT: fill-mode "backwards" kullanılır, "both" değil.
+   "both" animasyon bittikten sonra da transform'u (matrix) tutar; bu durum
+   position:fixed olan alt elemanların (modal) viewport yerine bu kutuya
+   bağlanmasına ve ekranın aşağısında görünmesine yol açıyordu. */
 .anim-giris > * {
-  animation: fadeYukari 0.35s ease both;
+  animation: fadeYukari 0.35s ease backwards;
 }
 .anim-giris > *:nth-child(2) {
   animation-delay: 0.05s;

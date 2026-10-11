@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Db } from "../lib/store";
 import type { View } from "./Sidebar";
 import { paraGir, paraGirCanli, parayaCevir } from "../lib/para";
@@ -111,22 +112,42 @@ export function Modal({
   children: React.ReactNode;
   genis?: boolean;
 }) {
+  // Modal açıkken arka sayfa kaymasın: form her zaman üstte görünür.
+  useEffect(() => {
+    if (!acik) return;
+    const eski = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.scrollTo(0, 0);
+    return () => {
+      document.body.style.overflow = eski;
+    };
+  }, [acik]);
   if (!acik) return null;
-  return (
+  if (!acik) return null;
+  // Portal: modal doğrudan <body>'ye basılır. Böylece üstteki transform'lu
+  // (animasyon) kutu position:fixed'i bozmaz; modal her zaman ekranın
+  // ortasında/üstünde açılır, sayfayı aşağı kaydırmak gerekmez.
+  return createPortal(
     <div
-      className="fixed inset-0 z-[99] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 sm:items-center"
+      className="fixed inset-0 z-[99] overflow-y-auto bg-slate-900/50"
       onClick={(e) => {
         if (e.target === e.currentTarget) kapat();
       }}
     >
-      <div className={`my-auto max-h-[90vh] w-full overflow-auto rounded-2xl bg-white p-5 ${genis ? "max-w-[900px]" : "max-w-[560px]"}`}>
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <h2 className="text-lg font-semibold">{baslik}</h2>
-          {sag && <div className="shrink-0">{sag}</div>}
+      <div className="flex min-h-full items-start justify-center p-4">
+        <div
+          className={`w-full rounded-2xl bg-white p-5 shadow-xl ${genis ? "max-w-[900px]" : "max-w-[560px]"}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <h2 className="text-lg font-semibold">{baslik}</h2>
+            {sag && <div className="shrink-0">{sag}</div>}
+          </div>
+          {children}
         </div>
-        {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -173,10 +194,116 @@ import {
   PiggyBank,
   Plus,
   Receipt,
+  Search,
   Settings,
   ShoppingCart,
   UtensilsCrossed
 } from "lucide-react";
+
+// --- Ekran görünümü ayarları (yakınlaştırma) ---------------------------
+const ZOOM_ANAHTAR = "hp-yakinlastirma";
+const ZOOM_ORANLAR = [80, 90, 100, 110, 125, 150];
+
+export function yakinlastirmaOku(): number {
+  try {
+    const v = Number(localStorage.getItem(ZOOM_ANAHTAR));
+    return v >= 50 && v <= 200 ? v : 100;
+  } catch {
+    return 100;
+  }
+}
+
+export function yakinlastirmaUygula(yuzde: number): void {
+  const v = Math.min(200, Math.max(50, Math.round(yuzde)));
+  try {
+    localStorage.setItem(ZOOM_ANAHTAR, String(v));
+  } catch {
+    /* depolama kapalı olabilir */
+  }
+  document.documentElement.style.fontSize = `${(v / 100) * 16}px`;
+}
+
+/** Uygulama açılışında bir kez çağrılır. */
+export function yakinlastirmaBaslat(): void {
+  if (typeof document === "undefined") return;
+  document.documentElement.style.fontSize = `${(yakinlastirmaOku() / 100) * 16}px`;
+}
+
+/** Üst menüde ekran görünümü ayarları: yakınlaştırma + sık kullanılanlar. */
+export function GorunumAyarlari() {
+  const [y, setY] = useState(100);
+  const [acik, setAcik] = useState(false);
+
+  useEffect(() => {
+    setY(yakinlastirmaOku());
+  }, []);
+
+  const uygula = (v: number) => {
+    yakinlastirmaUygula(v);
+    setY(v);
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setAcik((v) => !v)}
+        title="Ekran görünümü ayarları"
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition hover:bg-slate-50"
+      >
+        <Search size={14} className="shrink-0 text-slate-400" />
+        <span className="flex-1">Görünüm</span>
+        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600">%{y}</span>
+      </button>
+
+      {acik && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setAcik(false)} />
+          <div className="absolute left-0 top-full z-50 mt-1 w-[210px] rounded-xl border border-slate-200 bg-white p-2 text-left shadow-xl">
+            <div className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              Yakınlaştırma
+            </div>
+            <div className="grid grid-cols-3 gap-1">
+              {ZOOM_ORANLAR.map((o) => (
+                <button
+                  key={o}
+                  onClick={() => uygula(o)}
+                  className={`rounded-lg px-2 py-1.5 text-[12px] font-medium transition ${
+                    y === o ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  %{o}
+                </button>
+              ))}
+            </div>
+            <div className="mt-2 flex items-center gap-1.5 border-t border-slate-100 pt-2">
+              <button
+                onClick={() => uygula(y - 10)}
+                className="h-8 w-8 shrink-0 rounded-lg bg-slate-100 text-[15px] font-bold text-slate-700 hover:bg-slate-200"
+                title="Uzaklaştır"
+              >
+                −
+              </button>
+              <div className="flex-1 text-center text-[13px] font-semibold">%{y}</div>
+              <button
+                onClick={() => uygula(y + 10)}
+                className="h-8 w-8 shrink-0 rounded-lg bg-slate-100 text-[15px] font-bold text-slate-700 hover:bg-slate-200"
+                title="Yakınlaştır"
+              >
+                +
+              </button>
+            </div>
+            <button
+              onClick={() => uygula(100)}
+              className="mt-1.5 w-full rounded-lg py-1.5 text-[12px] text-slate-500 hover:bg-slate-50"
+            >
+              Varsayılana dön (%100)
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 /**
  * Üst barın sağ ucundaki kullanıcı paneli: defter seçimi, oturum (kilitle /
@@ -235,6 +362,14 @@ export function KullaniciPaneli({
                 <b className="block truncate text-[13px]">{ad || eposta}</b>
                 <span className="block truncate text-[11px] text-slate-500">{eposta}</span>
               </div>
+            </div>
+
+            {/* GÖRÜNÜM (ekran boyutu) */}
+            <div className="border-b border-slate-100 py-1">
+              <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Görünüm
+              </div>
+              <GorunumAyarlari />
             </div>
 
             {/* DEFTER */}

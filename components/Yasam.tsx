@@ -37,8 +37,13 @@ function PlanSatir({
         ✓
       </button>
       <span className={`min-w-0 flex-1 ${p.done ? "text-slate-400 line-through" : ""}`}>
-        {p.saat ? <b>{p.saat} </b> : null}
+        {p.saat ? <b>{p.saat}{p.bitis ? ` — ${p.bitis}` : ""} </b> : null}
         {p.text}
+        {p.bitis && p.sureDakika != null && (
+          <span className="ml-1.5 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">
+            {sureMetin(p.sureDakika)}
+          </span>
+        )}
       </span>
       <SilBtn onClick={sil} />
     </div>
@@ -137,6 +142,8 @@ export function ZamanView({ db, setDb }: Props) {
   }, [mod]);
   const [metin, setMetin] = useState("");
   const [saat, setSaat] = useState("");
+  /** Bitiş saati (saat aralığı) */
+  const [bitisSaat, setBitisSaat] = useState("");
 
   const pad = (n: number) => String(n).padStart(2, "0");
   const isoYerel = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -150,8 +157,17 @@ export function ZamanView({ db, setDb }: Props) {
   const ekle = (tarih?: string, saatDeger?: string) => {
     if (!metin.trim()) return alert("Plan yaz.");
     const t = tarih || secili;
-    setDb((d) => ({ ...d, plans: [...d.plans, { id: uid(), date: t, text: metin.trim(), saat: saatDeger ?? saat }] }));
+    const basSaat = saatDeger ?? saat;
+    setDb((d) => ({
+      ...d,
+      plans: [...d.plans, {
+        id: uid(), date: t, text: metin.trim(),
+        saat: basSaat, bitis: bitisSaat || undefined,
+        sureDakika: sureHesapla(basSaat, bitisSaat)
+      }]
+    }));
     setMetin("");
+    setBitisSaat("");
   };
 
   const silPlan = (id: string) => setDb((d) => ({ ...d, plans: d.plans.filter((x) => x.id !== id) }));
@@ -307,10 +323,34 @@ export function ZamanView({ db, setDb }: Props) {
         </Baslik>
         <PlanIlerleme ozet={gunOzet} />
         <div className="grid grid-cols-[110px_1fr_auto] gap-2">
-          <input type="time" className={inp} value={saat} onChange={(e) => setSaat(e.target.value)} title="Saat (boş bırakılabilir)" />
+          <input type="time" className={inp} value={saat} onChange={(e) => setSaat(e.target.value)} title="Başlangıç saati" />
           <input className={inp} value={metin} onChange={(e) => setMetin(e.target.value)} placeholder="örn: 10:00 Doktor"
             onKeyDown={(e) => { if (e.key === "Enter") ekle(); }} />
           <Btn onClick={() => ekle()}><Plus size={15} /></Btn>
+        </div>
+        {/* Saat aralığı: başlangıç → bitiş, süre otomatik */}
+        <div className="mt-2 grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2.5 sm:grid-cols-[110px_110px_1fr]">
+          <Alan etiket="Başlangıç">
+            <input type="time" className={inp} value={saat} onChange={(e) => setSaat(e.target.value)} />
+          </Alan>
+          <Alan etiket="Bitiş">
+            <input type="time" className={inp} value={bitisSaat} onChange={(e) => setBitisSaat(e.target.value)} />
+          </Alan>
+          <div>
+            <span className="mb-1 block text-xs text-slate-500">Süre</span>
+            <div className="flex h-[38px] items-center gap-2">
+              <span className="rounded-[9px] border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700">
+                {sureMetin(sureHesapla(saat, bitisSaat)) || "—"}
+              </span>
+              <span className="flex flex-wrap gap-1">
+                {[30, 60, 90, 120].map((dk) => (
+                  <Btn key={dk} kucuk ghost onClick={() => setBitisSaat(bitisEkle(saat, dk))} title={`${saat || "09:00"} + ${dk} dk`}>
+                    +{dk >= 60 ? dk / 60 + "s" : dk + "dk"}
+                  </Btn>
+                ))}
+              </span>
+            </div>
+          </div>
         </div>
         <div className="mt-2">
           {gunPlan.length === 0 ? <Bos yazi="Bu gün plan yok." /> : gunPlan.map((p) => (
@@ -397,7 +437,7 @@ export function ZamanView({ db, setDb }: Props) {
                       }`}
                     >
                       <span className={`shrink-0 ${p.done ? "text-emerald-600" : "text-slate-300"}`}>{p.done ? "☑" : "☐"}</span>
-                      <span className="min-w-0 flex-1">{p.saat ? <b>{p.saat} </b> : null}{p.text}</span>
+                      <span className="min-w-0 flex-1">{p.saat ? <b>{p.saat}{p.bitis ? ` — ${p.bitis}` : ""} </b> : null}{p.text}</span>
                     </button>
                   ))}
               </div>
@@ -486,7 +526,7 @@ export function ZamanView({ db, setDb }: Props) {
                   className={`flex w-full items-start gap-1.5 text-left ${p.done ? "text-slate-400 line-through" : ""}`}
                 >
                   <span className={`shrink-0 ${p.done ? "text-emerald-600" : "text-slate-400"}`}>{p.done ? "✅" : "⬜"}</span>
-                  <span className="min-w-0 flex-1">{p.saat ? <b>{p.saat} </b> : null}{p.text}</span>
+                  <span className="min-w-0 flex-1">{p.saat ? <b>{p.saat}{p.bitis ? ` — ${p.bitis}` : ""} </b> : null}{p.text}</span>
                 </button>
               ))}
               {db.tasks.filter((g) => g.tarih === secili).map((g) => (
@@ -564,9 +604,15 @@ export function GorevView({ db, setDb }: Props) {
   const listeAd = (t: Task) => (t.liste || "").trim() || VARSAYILAN_LISTE;
   const listeler = useMemo(() => {
     const s = new Set<string>([VARSAYILAN_LISTE]);
+    // Önce kayıtlı listeler (silinen görevlere rağmen kalır)
+    (db.listeler || []).forEach((l) => {
+      const a = l.trim();
+      if (a) s.add(a);
+    });
+    // Eski kayıtlarda liste alanı yoksa görevlerden tamamla
     db.tasks.forEach((t) => s.add(listeAd(t)));
     return [...s];
-  }, [db.tasks]);
+  }, [db.tasks, db.listeler]);
 
   const guncelle = (id: string, yama: Partial<Task>) =>
     setDb((d) => ({ ...d, tasks: d.tasks.map((x) => (x.id === id ? { ...x, ...yama } : x)) }));
@@ -587,6 +633,8 @@ export function GorevView({ db, setDb }: Props) {
       setListeForm(false);
       return;
     }
+    // Liste kalici kayda yazilir: son gorem silinse de liste durur.
+    setDb((d) => ({ ...d, listeler: [...(d.listeler || []), ad] }));
     setAktifListe(ad);
     setYeniListe("");
     setListeForm(false);
@@ -599,6 +647,7 @@ export function GorevView({ db, setDb }: Props) {
     if (!confirm(`"${ad}" listesi silinsin mi?\n\nBu listedeki ${hedef} görev SİLİNMEZ, "Genel" listesine taşınır.`)) return;
     setDb((d) => ({
       ...d,
+      listeler: (d.listeler || []).filter((x) => x !== ad),
       tasks: d.tasks.map((t) => (listeAd(t) === ad ? { ...t, liste: undefined } : t))
     }));
     if (aktifListe === ad) setAktifListe(VARSAYILAN_LISTE);

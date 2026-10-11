@@ -81,7 +81,12 @@ export type Plan = {
   id: string;
   date: string;
   text: string;
+  /** başlangıç saati (SS:DD) */
   saat: string;
+  /** bitiş saati (SS:DD) — saat aralığı */
+  bitis?: string;
+  /** aradaki geçen süre (dakika) */
+  sureDakika?: number;
   /** plan tamamlandı mı (eski kayıtlarda yoksa tamamlanmamış sayılır) */
   done?: boolean;
 };
@@ -142,6 +147,10 @@ export type Db = {
   meals: Meal[];
   journal: Journal[];
   notes: Note[];
+  /** Kullanıcının oluşturduğu görev listeleri. Liste, görevlerden TÜRETİLMEZ;
+   *  aksi halde son görev silinince liste de kayboluyordu. Eski kayıtlarda yoksa
+   *  görevlerden türetilerek doldurulur. */
+  listeler?: string[];
   kiloHedef: { hedef: number; boy: number; tarih: string };
   ayarlar: Ayarlar;
 };

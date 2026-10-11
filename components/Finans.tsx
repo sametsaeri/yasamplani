@@ -84,6 +84,10 @@ export default function Finans({ db, setDb }: Props) {
   const [taksitSayi, setTaksitSayi] = useState("3");
   /** Yanında biri varsa rakamları gizle (gizlilik) */
   const [txGizli, setTxGizli] = useState(false);
+  /** Belirli bir hesaptan açıldıysa hesap kilitli: diğer hesaplar listelenmez */
+  const [txHesapSabit, setTxHesapSabit] = useState("");
+  /** Transfer hedef listesi yalnızca istendiğinde açılır (gizlilik) */
+  const [hedefAcik, setHedefAcik] = useState(false);
   const [fAra, setFAra] = useState("");
   const [fTur, setFTur] = useState("");
   const [fHesap, setFHesap] = useState("");
@@ -249,11 +253,16 @@ export default function Finans({ db, setDb }: Props) {
         account_id: t.account_id, to_account_id: t.to_account_id, description: t.description,
         doc: t.doc, due: t.due, paid: t.paid
       });
+      setTxHesapSabit("");
     } else {
       if (hesaplar.length === 0) return alert("Önce + Hesap ile hesap aç.");
       setTx({ ...BOS_TX, date: bugun(), account_id: sabitHesap || hesaplar[0].id });
       setTaksitAcik(false);
+      // Belirli bir hesaptan açıldıysa hesap kilitlenir: yanında biri varsa
+      // diğer hesapların adları ekranda görünmez.
+      setTxHesapSabit(sabitHesap || "");
     }
+    setHedefAcik(false);
     setTxModal(true);
   };
 
@@ -857,7 +866,7 @@ export default function Finans({ db, setDb }: Props) {
                 <option value="expense">Gider</option><option value="income">Gelir</option>
               </select>
             </Alan>
-            <Alan etiket="Tutar (₺)"><input className={inp} value={sTutar} onChange={(e) => setSTutar(e.target.value)} placeholder="0,00" /></Alan>
+            <Alan etiket="Tutar (₺)"><ParaGirisi value={sTutar} onChange={(metin) => setSTutar(metin)} /></Alan>
             <Alan etiket="Kategori">
               <select className={inp} value={sKat} onChange={(e) => setSKat(e.target.value)}>
                 {KATEGORILER.map((k) => <option key={k}>{k}</option>)}
@@ -994,17 +1003,41 @@ export default function Finans({ db, setDb }: Props) {
               {KATEGORILER.map((k) => <option key={k}>{k}</option>)}
             </select>
           </Alan>
-          <Alan etiket="Hesap">
-            <select className={inp} value={tx.account_id} onChange={(e) => setTx({ ...tx, account_id: e.target.value })}>
-              {hesaplar.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
-            </select>
-          </Alan>
-          {tx.type === "transfer" && (
-            <Alan etiket="Hedef hesap (aynı defter)">
-              <select className={inp} value={tx.to_account_id} onChange={(e) => setTx({ ...tx, to_account_id: e.target.value })}>
-                <option value="">—</option>
+          {txHesapSabit ? (
+            /* Hesap kilitli: diğer hesapların adı ekranda görünmez (gizlilik) */
+            <Alan etiket="Hesap">
+              <div className={`flex items-center gap-2 rounded-[9px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm ${txGizli ? "blur-[5px] select-none" : ""}`}>
+                <HesapIkon tip={db.accounts.find((h) => h.id === txHesapSabit)?.type || "current"} />
+                <span className="font-medium">
+                  {db.accounts.find((h) => h.id === txHesapSabit)?.name || "Hesap"}
+                </span>
+                <span className="ml-auto text-[11px] text-slate-400">🔒 sabit</span>
+              </div>
+            </Alan>
+          ) : (
+            <Alan etiket="Hesap">
+              <select className={inp} value={tx.account_id} onChange={(e) => setTx({ ...tx, account_id: e.target.value })}>
                 {hesaplar.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
               </select>
+            </Alan>
+          )}
+          {tx.type === "transfer" && (
+            <Alan etiket="Hedef hesap (aynı defter)">
+              {hedefAcik ? (
+                <select className={inp} value={tx.to_account_id} onChange={(e) => setTx({ ...tx, to_account_id: e.target.value })}>
+                  <option value="">—</option>
+                  {hesaplar.filter((h) => h.id !== tx.account_id).map((h) => (
+                    <option key={h.id} value={h.id}>{h.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <button type="button" onClick={() => setHedefAcik(true)}
+                  className="w-full rounded-[9px] border border-dashed border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-500 hover:border-slate-400">
+                  {tx.to_account_id
+                    ? db.accounts.find((h) => h.id === tx.to_account_id)?.name || "Seçildi"
+                    : "+ Hedef hesabı seç"}
+                </button>
+              )}
             </Alan>
           )}
           <Alan etiket="Belge türü">

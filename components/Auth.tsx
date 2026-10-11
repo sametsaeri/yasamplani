@@ -89,7 +89,7 @@ export default function AuthScreen({ onGiris }: { onGiris: (eposta: string) => v
                 const ep = eposta.trim().toLocaleLowerCase("tr");
                 void calistir(async () => {
                   const h = await giris(ep, parola);
-                  if (!h && beniHatirla) parolaHatirla(ep, parola);
+                  if (!h && beniHatirla && parolaKaydet) parolaHatirla(ep, parola);
                   return h;
                 }, ep);
               }}
