@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { KeyRound, LogIn, UserPlus, Wallet } from "lucide-react";
-import { SORULAR, epostaGecerli, giris, kayitOl, sifirla, sifirlamaSorusu } from "../lib/auth";
+import { SORULAR, epostaGecerli, giris, hatirlanan, kayitOl, parolaHatirla, sifirla, sifirlamaSorusu } from "../lib/auth";
 import { inp } from "./ui";
 
 export default function AuthScreen({ onGiris }: { onGiris: (eposta: string) => void }) {
   const [mod, setMod] = useState<"giris" | "kayit" | "sifremi">("giris");
   const [ad, setAd] = useState("");
-  const [eposta, setEposta] = useState("");
-  const [parola, setParola] = useState("");
+  // Kayıtlıysa form otomatik dolar (e-posta her zaman, parola istenirse)
+  const [eposta, setEposta] = useState(() => hatirlanan().eposta);
+  const [parola, setParola] = useState(() => hatirlanan().parola);
   const [soru, setSoru] = useState(SORULAR[0]);
   const [cevap, setCevap] = useState("");
   const [sifremiAdim, setSifremiAdim] = useState(1);
@@ -17,6 +18,9 @@ export default function AuthScreen({ onGiris }: { onGiris: (eposta: string) => v
   const [yeni, setYeni] = useState("");
   const [hata, setHata] = useState("");
   const [yukleniyor, setYukleniyor] = useState(false);
+  const [beniHatirla, setBeniHatirla] = useState(() => !!hatirlanan().eposta);
+  const [parolaKaydet, setParolaKaydet] = useState(() => !!hatirlanan().parola);
+  const [parolaGorunur, setParolaGorunur] = useState(false);
 
   const calistir = async (fn: () => Promise<string | null>, basariliEposta?: string) => {
     setHata("");
@@ -80,10 +84,43 @@ export default function AuthScreen({ onGiris }: { onGiris: (eposta: string) => v
           {mod === "giris" && (
             <form
               className="space-y-3"
-              onSubmit={(e) => { e.preventDefault(); void calistir(() => giris(eposta, parola), eposta.trim().toLocaleLowerCase("tr")); }}
+              onSubmit={(e) => {
+                e.preventDefault();
+                const ep = eposta.trim().toLocaleLowerCase("tr");
+                void calistir(async () => {
+                  const h = await giris(ep, parola);
+                  if (!h && beniHatirla) parolaHatirla(ep, parola);
+                  return h;
+                }, ep);
+              }}
             >
               <label className="block text-xs text-slate-500">E-posta<input className={inp} value={eposta} onChange={(e) => setEposta(e.target.value)} placeholder="ornek@eposta.com" autoComplete="email" /></label>
-              <label className="block text-xs text-slate-500">Parola<input type="password" className={inp} value={parola} onChange={(e) => setParola(e.target.value)} placeholder="••••••" autoComplete="current-password" /></label>
+              <label className="block text-xs text-slate-500">Parola
+                <input
+                  type={parolaGorunur ? "text" : "password"}
+                  className={inp}
+                  value={parola}
+                  onChange={(e) => setParola(e.target.value)}
+                  placeholder="••••••"
+                  autoComplete="current-password"
+                />
+              </label>
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <label className="flex items-center gap-1.5 text-[13px] text-slate-600">
+                  <input type="checkbox" checked={beniHatirla} onChange={(e) => setBeniHatirla(e.target.checked)} />
+                  Beni hatırla
+                </label>
+                <label className="flex items-center gap-1.5 text-[13px] text-slate-600">
+                  <input type="checkbox" checked={parolaKaydet} disabled={!beniHatirla}
+                    onChange={(e) => setParolaKaydet(e.target.checked)} />
+                  Parolayı da kaydet
+                </label>
+              </div>
+              {parolaKaydet && beniHatirla && (
+                <p className="text-[11px] text-amber-600">
+                  ⚠ Parola bu bilgisayarda düz metin saklanır (form otomatik dolar).
+                </p>
+              )}
               <button disabled={yukleniyor} className="w-full rounded-[10px] bg-slate-900 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-60">
                 {yukleniyor ? "Giriliyor..." : "Giriş Yap"}
               </button>

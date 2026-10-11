@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useState } from "react";
 import type { Db } from "../lib/store";
 import type { View } from "./Sidebar";
+import { paraGir, paraGirCanli, parayaCevir } from "../lib/para";
 
 export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <div className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ${className}`}>{children}</div>;
@@ -68,29 +69,61 @@ export function Alan({ etiket, children }: { etiket: string; children: React.Rea
 export const inp =
   "w-full rounded-[9px] border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-900";
 
+/** Gizli mod: rakamları nokta ile maskeler (yanında oturan biri okuyamasın). */
+export function Gizli({ children, acik }: { children: React.ReactNode; acik: boolean }) {
+  return <span className={acik ? "" : "blur-[5px] select-none transition"}>{children}</span>;
+}
+
+/** Türkçe para girişi: "132000,01" yazınca alanda "132.000,01" görünür. */
+export function ParaGirisi({ value, onChange, className = "", placeholder = "0,00" }: {
+  value: string;
+  onChange: (metin: string, sayi: number) => void;
+  className?: string;
+  placeholder?: string;
+}) {
+  return (
+    <input
+      className={`${inp} tabular-nums ${className}`}
+      inputMode="decimal"
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => onChange(paraGirCanli(e.target.value), parayaCevir(e.target.value))}
+      onBlur={(e) => {
+        if (!e.target.value) return onChange("", 0);
+        onChange(paraGir(parayaCevir(e.target.value)), parayaCevir(e.target.value));
+      }}
+    />
+  );
+}
+
 export function Modal({
   acik,
   kapat,
   baslik,
+  sag,
   children,
   genis
 }: {
   acik: boolean;
   kapat: () => void;
   baslik: React.ReactNode;
+  sag?: React.ReactNode;
   children: React.ReactNode;
   genis?: boolean;
 }) {
   if (!acik) return null;
   return (
     <div
-      className="fixed inset-0 z-[99] flex items-center justify-center bg-slate-900/50 p-4"
+      className="fixed inset-0 z-[99] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 sm:items-center"
       onClick={(e) => {
         if (e.target === e.currentTarget) kapat();
       }}
     >
-      <div className={`max-h-[90vh] w-full overflow-auto rounded-2xl bg-white p-5 ${genis ? "max-w-[900px]" : "max-w-[560px]"}`}>
-        <h2 className="mb-4 text-lg font-semibold">{baslik}</h2>
+      <div className={`my-auto max-h-[90vh] w-full overflow-auto rounded-2xl bg-white p-5 ${genis ? "max-w-[900px]" : "max-w-[560px]"}`}>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <h2 className="text-lg font-semibold">{baslik}</h2>
+          {sag && <div className="shrink-0">{sag}</div>}
+        </div>
         {children}
       </div>
     </div>

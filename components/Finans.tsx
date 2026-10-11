@@ -5,9 +5,10 @@ import { BookOpen, Plus } from "lucide-react";
 import type { Account, Db, Ledger, Sablon, Tx } from "../lib/store";
 import { HESAP_TIP_AD, KATEGORILER } from "../lib/store";
 import { bugun, para, trh, uid } from "../lib/format";
-import { bakiyeler, defterOzet } from "../lib/finance";
+import { bakiyeler, defterOzet, donemOzeti, taksitTarihleri } from "../lib/finance";
+import { parayaCevir } from "../lib/para";
 import { indir, islemCsv } from "../lib/csv";
-import { Alan, Baslik, Bos, Btn, Card, Cubuk, DuzenleBtn, HesapIkon, KategoriIkon, Modal, PilGosterge, SilBtn, Stat, inp } from "./ui";
+import { Alan, Baslik, Bos, Btn, Card, Cubuk, DuzenleBtn, Gizli, HesapIkon, KategoriIkon, Modal, ParaGirisi, PilGosterge, SilBtn, Stat, inp } from "./ui";
 
 type Props = { db: Db; setDb: (u: (d: Db) => Db) => void };
 type TxForm = {
@@ -81,6 +82,8 @@ export default function Finans({ db, setDb }: Props) {
   const [tx, setTx] = useState<TxForm>({ ...BOS_TX, date: bugun() });
   const [taksitAcik, setTaksitAcik] = useState(false);
   const [taksitSayi, setTaksitSayi] = useState("3");
+  /** Yanında biri varsa rakamları gizle (gizlilik) */
+  const [txGizli, setTxGizli] = useState(false);
   const [fAra, setFAra] = useState("");
   const [fTur, setFTur] = useState("");
   const [fHesap, setFHesap] = useState("");
@@ -255,7 +258,7 @@ export default function Finans({ db, setDb }: Props) {
   };
 
   const txKaydet = () => {
-    const tut = Number(String(tx.amount).replace(".", "").replace(",", ".")) || Number(tx.amount) || 0;
+    const tut = parayaCevir(tx.amount);
     if (!tx.account_id) return alert("Hesap seç.");
     if (!tx.date || !(tut > 0)) return alert("Tarih ve tutar gir.");
     if (tx.type === "transfer" && !tx.to_account_id) return alert("Transfer için hedef hesap seç.");
@@ -289,9 +292,7 @@ export default function Finans({ db, setDb }: Props) {
         const tek = Math.round((tut / n) * 100) / 100;
         const yeni: Tx[] = [];
         for (let i = 0; i < n; i++) {
-          const d = new Date(tx.date + "T00:00:00");
-          d.setMonth(d.getMonth() + i);
-          const tarih = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          const tarih = taksitTarihleri(tx.date, n)[i];
           yeni.push({
             ...kayit,
             id: uid(),
@@ -964,15 +965,30 @@ export default function Finans({ db, setDb }: Props) {
         <div className="mt-4 flex justify-end gap-2"><Btn ghost onClick={() => setHesapModal(false)}>Vazgeç</Btn><Btn onClick={hesapKaydet}>Kaydet</Btn></div>
       </Modal>
 
-      <Modal acik={txModal} kapat={() => setTxModal(false)} baslik={`${tx.id ? "İşlemi Düzenle" : "Yeni İşlem"} • ${aktifDefter.name}`}>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <Modal acik={txModal} kapat={() => setTxModal(false)}
+        baslik={
+          <span className="flex items-center gap-2">
+            <span className={txGizli ? "blur-[5px] select-none transition" : ""}>
+              {tx.id ? "İşlemi Düzenle" : "Yeni İşlem"} • {aktifDefter.name}
+            </span>
+          </span>
+        }
+        sag={
+          <Btn kucuk ghost onClick={() => setTxGizli((v) => !v)} title="Yanında biri varsa rakamları gizle">
+            {txGizli ? "👁 Göster" : "🙈 Gizle"}
+          </Btn>
+        }
+      >
+        <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${txGizli ? "blur-[5px] select-none transition" : ""}`}>
           <Alan etiket="Tür">
             <select className={inp} value={tx.type} onChange={(e) => setTx({ ...tx, type: e.target.value as Tx["type"] })}>
               <option value="expense">Gider</option><option value="income">Gelir</option><option value="transfer">Transfer</option>
             </select>
           </Alan>
           <Alan etiket="Tarih"><input type="date" className={inp} value={tx.date} onChange={(e) => setTx({ ...tx, date: e.target.value })} /></Alan>
-          <Alan etiket="Tutar (₺)"><input className={inp} value={tx.amount} onChange={(e) => setTx({ ...tx, amount: e.target.value })} placeholder="0,00" /></Alan>
+          <Alan etiket="Tutar (₺)">
+            <ParaGirisi value={tx.amount} onChange={(metin) => setTx({ ...tx, amount: metin })} />
+          </Alan>
           <Alan etiket="Kategori">
             <select className={inp} value={tx.category} onChange={(e) => setTx({ ...tx, category: e.target.value })}>
               {KATEGORILER.map((k) => <option key={k}>{k}</option>)}
@@ -1077,6 +1093,26 @@ function HesapDetay({ db, setDb, hesap, islemAc, txDuzenle, kapat }: {
       }]
     }));
   };
+  const [kontrolTarih, setKontrolTarih] = useState(hesap.sonKontrolTarih || "");
+  const [kontrolBakiye, setKontrolBakiye] = useState(
+    hesap.sonKontrolBakiye != null ? String(hesap.sonKontrolBakiye).replace(".", ",") : ""
+  );
+  const [mutabakatTarih, setMutabakatTarih] = useState(hesap.mutabakatTarih || "");
+  const [mutabakatBakiye, setMutabakatBakiye] = useState(
+    hesap.mutabakatBakiye != null ? String(hesap.mutabakatBakiye).replace(".", ",") : ""
+  );
+  const hesapKaydet = (y: Partial<Account>) => setDb((d) => ({
+    ...d,
+    accounts: d.accounts.map((h) => (h.id === hesap.id ? { ...h, ...y } : h))
+  }));
+  const kontrolEt = () => {
+    if (!kontrolTarih) return alert("Kontrol tarihi gir.");
+    hesapKaydet({ sonKontrolTarih: kontrolTarih, sonKontrolBakiye: parayaCevir(kontrolBakiye) });
+  };
+  const mutabakatEt = () => {
+    if (!mutabakatTarih) return alert("Mutabakat tarihi gir.");
+    hesapKaydet({ mutabakatTarih, mutabakatBakiye: parayaCevir(mutabakatBakiye) });
+  };
   const [dAra, setDAra] = useState("");
   const [dTur, setDTur] = useState("");
   const [dKat, setDKat] = useState("");
@@ -1111,17 +1147,16 @@ function HesapDetay({ db, setDb, hesap, islemAc, txDuzenle, kapat }: {
   liste.forEach((r) => { if (r.v[0] === "+") gir += r.tutar; else cik += r.tutar; });
   const borc = x < 0 ? -x : 0;
   const E = hesap.ekstre >= 1 && hesap.ekstre <= 28 ? hesap.ekstre : 1;
-  const simdiD = new Date();
-  let pb = new Date(simdiD.getFullYear(), simdiD.getMonth(), E);
-  if (simdiD.getDate() < E) pb = new Date(simdiD.getFullYear(), simdiD.getMonth() - 1, E);
-  const pBas = `${pb.getFullYear()}-${String(pb.getMonth() + 1).padStart(2, "0")}-${String(pb.getDate()).padStart(2, "0")}`;
-  let dHar = 0;
+  const kart = hesap.type === "credit_card";
+  // Dönem hesabı tek yerden (lib/finance.ts) gelir: taksitler de kendi
+  // tarihlerine göre doğru döneme yazılır.
+  const donem = donemOzeti(hesap, db.transactions);
+  const dHar = donem.harcama;
   let dOde = 0;
   db.transactions.forEach((t) => {
-    if (t.date < pBas) return;
-    const amt = Number(t.amount) || 0;
-    if (t.account_id === hesap.id && t.type === "expense") dHar += amt;
-    if (t.to_account_id === hesap.id && t.type === "transfer") dOde += amt;
+    if (t.type !== "transfer") return;
+    if (t.date < donem.baslangic || t.date > donem.bitis) return;
+    if (t.to_account_id === hesap.id) dOde += Number(t.amount) || 0;
   });
   const beklenenFark = hesap.beklenen ? Number(hesap.beklenen) - x : null;
   const kategoriler = [...new Set(tum.map((r) => r.kat))].sort();
@@ -1159,6 +1194,108 @@ function HesapDetay({ db, setDb, hesap, islemAc, txDuzenle, kapat }: {
         <Card><div className="flex items-center gap-1.5 text-xs text-slate-500"><span className="text-green-600">↗</span> Gelen</div><div className="text-[22px] font-bold">{para(gir)}</div></Card>
         <Card><div className="flex items-center gap-1.5 text-xs text-slate-500"><span className="text-red-600">↘</span> Giden</div><div className="text-[22px] font-bold">{para(cik)}</div></Card>
       </div>
+
+      {/* Kredi kartı: ekstre kesimine göre dönem borcu */}
+      {kart && (
+        <Card className="mb-3">
+          <Baslik sag={<span className="text-xs text-slate-400">Son ödeme: <b className="text-slate-700">{trh(donem.sonOdeme)}</b></span>}>
+            Dönem Borcu (Ekstre {trh(donem.bitis)}'de kesildi)
+          </Baslik>
+          <div className="mb-1 text-xs text-slate-500">
+            {trh(donem.baslangic)} — {trh(donem.bitis)} arası taksitli işlemler dahil
+          </div>
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <div className="text-xs text-slate-500">Dönem Harcaması</div>
+              <div className="text-[24px] font-bold text-red-600">{para(dHar)}</div>
+            </div>
+            {dOde > 0 && (
+              <div>
+                <div className="text-xs text-slate-500">Bu dönemde Ödenen</div>
+                <div className="text-[24px] font-bold text-green-600">{para(dOde)}</div>
+              </div>
+            )}
+            <div>
+              <div className="text-xs text-slate-500">Kalan Dönem Borcu</div>
+              <div className="text-[24px] font-bold">{para(Math.max(0, dHar - dOde))}</div>
+            </div>
+            {donem.taksitSayisi > 0 && (
+              <div className="rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs text-indigo-700">
+                📅 Bu dönemdeki taksit: <b>{donem.taksitSayisi}</b> adet
+              </div>
+            )}
+          </div>
+          {donem.taksitler.length > 0 && (
+            <div className="mt-3 border-t border-slate-100 pt-2">
+              <div className="mb-1 text-xs font-medium text-slate-500">Bu döneme düşen taksitler</div>
+              <ul className="space-y-1">
+                {donem.taksitler.map((t) => (
+                  <li key={t.id} className="flex justify-between text-[13px]">
+                    <span className="text-slate-500">
+                      {t.taksit?.no}/{t.taksit?.toplam}. taksit · {trh(t.date)} · {t.description}
+                    </span>
+                    <b>{para(t.amount)}</b>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Son bakiye kontrolü ve hesap mutabakatı */}
+      <Card className="mb-3">
+        <Baslik>Kontrol & Mutabakat</Baslik>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <div className="mb-2 text-xs font-medium text-slate-500">🔍 Son Bakiye Kontrolü</div>
+            {hesap.sonKontrolTarih ? (
+              <div className="mb-2 rounded-lg bg-slate-50 p-2 text-[13px]">
+                <div className="text-slate-500">Son kontrol</div>
+                <b>{trh(hesap.sonKontrolTarih)}</b> · <b>{para(hesap.sonKontrolBakiye || 0)}</b>
+                {hesap.sonKontrolBakiye != null && Math.abs((hesap.sonKontrolBakiye || 0) - x) > 0.005 && (
+                  <span className="ml-1 text-amber-600">(uyumsuz {para(x - (hesap.sonKontrolBakiye || 0))})</span>
+                )}
+              </div>
+            ) : (
+              <div className="mb-2 text-xs text-slate-400">Henüz kontrol girilmedi.</div>
+            )}
+            <div className="flex flex-wrap items-end gap-2">
+              <Alan etiket="Kontrol tarihi">
+                <input type="date" className={inp} value={kontrolTarih} onChange={(e) => setKontrolTarih(e.target.value)} />
+              </Alan>
+              <Alan etiket="Görünen bakiye">
+                <ParaGirisi value={kontrolBakiye} onChange={(m) => setKontrolBakiye(m)} className="w-32" />
+              </Alan>
+              <Btn kucuk onClick={kontrolEt}>Kaydet</Btn>
+            </div>
+          </div>
+          <div>
+            <div className="mb-2 text-xs font-medium text-slate-500">✅ Son Hesap Mutabakatı</div>
+            {hesap.mutabakatTarih ? (
+              <div className="mb-2 rounded-lg bg-slate-50 p-2 text-[13px]">
+                <div className="text-slate-500">Son mutabakat</div>
+                <b>{trh(hesap.mutabakatTarih)}</b> · <b>{para(hesap.mutabakatBakiye || 0)}</b>
+                {hesap.mutabakatBakiye != null && Math.abs((hesap.mutabakatBakiye || 0) - x) > 0.005 && (
+                  <span className="ml-1 text-amber-600">(uyumsuz {para(x - (hesap.mutabakatBakiye || 0))})</span>
+                )}
+              </div>
+            ) : (
+              <div className="mb-2 text-xs text-slate-400">Henüz mutabakat girilmedi.</div>
+            )}
+            <div className="flex flex-wrap items-end gap-2">
+              <Alan etiket="Mutabakat tarihi">
+                <input type="date" className={inp} value={mutabakatTarih} onChange={(e) => setMutabakatTarih(e.target.value)} />
+              </Alan>
+              <Alan etiket="Eşleşen bakiye">
+                <ParaGirisi value={mutabakatBakiye} onChange={(m) => setMutabakatBakiye(m)} className="w-32" />
+              </Alan>
+              <Btn kucuk onClick={mutabakatEt}>Kaydet</Btn>
+              <Btn kucuk ghost onClick={() => mutabakatEt()}>Hesapla & Tamamla</Btn>
+            </div>
+          </div>
+        </div>
+      </Card>
       {hesap.type === "credit_card" && hesap.limit ? (
         <div className="mb-3 flex flex-wrap items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4">
           <PilGosterge
@@ -1200,7 +1337,7 @@ function HesapDetay({ db, setDb, hesap, islemAc, txDuzenle, kapat }: {
       {hesap.type === "credit_card" && (
         <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-[13px]">
           <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-            <b>📅 Dönem Özeti <span className="font-normal text-slate-400">(ekstre her ayın {E}. günü • {trh(pBas)} sonrası)</span></b>
+            <b>📅 Dönem Özeti <span className="font-normal text-slate-400">(ekstre her ayın {E}. günü • {trh(donem.baslangic)} — {trh(donem.bitis)})</span></b>
             <Btn kucuk onClick={odeAc}>💳 Kart Öde</Btn>
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1">

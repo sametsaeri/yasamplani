@@ -28,6 +28,14 @@ export type Account = {
   paneldeGizle?: boolean;
   /** hesap tamamen gizlendi (Finans listesinde de görünmez; Ayarlar'dan geri gelir) */
   gizli?: boolean;
+  /** Son bakiye kontrol tarihi — banka/kart ekranından bakılan gün */
+  sonKontrolTarih?: string;
+  /** Son kontrolde görünen bakiye (elle girilir, otomatik hesaplanmaz) */
+  sonKontrolBakiye?: number;
+  /** Son hesap mutabakat tarihi (banka ile karşılaştırılıp eşleştirilen gün) */
+  mutabakatTarih?: string;
+  /** Mutabakatta eşleşen bakiye */
+  mutabakatBakiye?: number;
 };
 export type TxType = "income" | "expense" | "transfer";
 export type DocType = "yok" | "cek" | "fatura";
@@ -62,6 +70,12 @@ export type Task = {
   tarih?: string;
   /** kullanıcı listesi (İşyeri / Ev / …); eski kayıtlarda yoksa "Genel" sayılır */
   liste?: string;
+  /** Zaman aralığı başlangıcı (HH:MM) — planlama modülü için */
+  baslangic?: string;
+  /** Zaman aralığı bitişi (HH:MM) */
+  bitis?: string;
+  /** Aradaki geçen süre (dakika) — otomatik hesaplanır, elle de girilebilir */
+  sureDakika?: number;
 };
 export type Plan = {
   id: string;

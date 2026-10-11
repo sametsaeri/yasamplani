@@ -513,10 +513,45 @@ export function ZamanView({ db, setDb }: Props) {
   );
 }
 
+/** "09:30" → "11:00" arası geçen süreyi dakika olarak döndürür (gece yarısını aşan durumlar dahil). */
+export function sureHesapla(bas?: string, bit?: string): number | undefined {
+  if (!bas || !bit) return undefined;
+  const dk = (s: string) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(s);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : NaN;
+  };
+  const a = dk(bas);
+  const b = dk(bit);
+  if (Number.isNaN(a) || Number.isNaN(b)) return undefined;
+  return b >= a ? b - a : 24 * 60 - a + b;
+}
+
+/** Başlangıç saatine dakika ekleyip bitişi döndürür ("09:00" + 90dk → "10:30"). */
+export function bitisEkle(bas?: string, dakika = 30): string {
+  if (!bas) return "";
+  const m = /^(\d{1,2}):(\d{2})$/.exec(bas);
+  if (!m) return "";
+  const toplam = (Number(m[1]) * 60 + Number(m[2]) + dakika) % (24 * 60);
+  return `${String(Math.floor(toplam / 60)).padStart(2, "0")}:${String(toplam % 60).padStart(2, "0")}`;
+}
+
+/** 90 dakikayı "1s 30dk" biçiminde yazar. */
+export function sureMetin(dakika?: number): string {
+  if (dakika == null || !Number.isFinite(dakika)) return "";
+  const sa = Math.floor(dakika / 60);
+  const dk = Math.round(dakika % 60);
+  if (sa && dk) return `${sa}s ${dk}dk`;
+  if (sa) return `${sa} saat`;
+  return `${dk} dk`;
+}
+
 export function GorevView({ db, setDb }: Props) {
   const [metin, setMetin] = useState("");
   const [oncelik, setOncelik] = useState<"dusuk" | "normal" | "yuksek">("normal");
   const [tarih, setTarih] = useState("");
+  /** Zaman aralığı: başlangıç / bitiş saati; süre otomatik hesaplanır */
+  const [baslangic, setBaslangic] = useState("");
+  const [bitis, setBitis] = useState("");
   const [filtre, setFiltre] = useState<"tumu" | "acik" | "biten">("tumu");
   const [acik, setAcik] = useState<string | null>(null);
   const [altMetin, setAltMetin] = useState("");
@@ -576,11 +611,15 @@ export function GorevView({ db, setDb }: Props) {
       tasks: [...d.tasks, {
         id: uid(), text: metin.trim(), prio: oncelik, done: false, aciklama: "",
         durum: "bekliyor", altlar: [], tarih: tarih || undefined,
+        baslangic: baslangic || undefined, bitis: bitis || undefined,
+        sureDakika: sureHesapla(baslangic, bitis),
         liste: aktifListe === VARSAYILAN_LISTE ? undefined : aktifListe
       }]
     }));
     setMetin("");
     setTarih("");
+    setBaslangic("");
+    setBitis("");
   };
 
   let liste = [...db.tasks]
@@ -683,6 +722,29 @@ export function GorevView({ db, setDb }: Props) {
         </Alan>
         <div className="flex items-end"><Btn onClick={ekle}><Plus size={15} className="mr-1 inline" /> Ekle</Btn></div>
       </div>
+
+      {/* Saat aralığı (başlangıç → bitiş; süre otomatik) */}
+      <div className="mb-3 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-4">
+        <Alan etiket="Başlangıç saati">
+          <input type="time" className={inp} value={baslangic} onChange={(e) => setBaslangic(e.target.value)} />
+        </Alan>
+        <Alan etiket="Bitiş saati">
+          <input type="time" className={inp} value={bitis} onChange={(e) => setBitis(e.target.value)} />
+        </Alan>
+        <div>
+          <span className="mb-1 block text-xs text-slate-500">Süre</span>
+          <div className="flex h-[38px] items-center rounded-[9px] border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700">
+            {sureMetin(sureHesapla(baslangic, bitis)) || "—"}
+          </div>
+        </div>
+        <div className="flex items-end gap-1.5">
+          {[15, 30, 45, 60, 90].map((dk) => (
+            <Btn key={dk} kucuk ghost onClick={() => setBitis(bitisEkle(baslangic, dk))} title={`Başlangıca ${dk} dk ekle`}>
+              +{dk}dk
+            </Btn>
+          ))}
+        </div>
+      </div>
       <div className="my-3 flex gap-2">
         {(["tumu", "acik", "biten"] as const).map((f) => (
           <Btn key={f} kucuk ghost={! (filtre === f)} onClick={() => setFiltre(f)}>
@@ -708,6 +770,12 @@ export function GorevView({ db, setDb }: Props) {
               {t.tarih && (
                 <span className={`mt-0.5 block text-[11px] ${!t.done && t.tarih < bugun() ? "font-semibold text-red-500" : "text-slate-400"}`}>
                   📅 {trh(t.tarih)}{!t.done && t.tarih < bugun() ? " • gecikti" : ""}
+                </span>
+              )}
+              {(t.baslangic || t.bitis) && (
+                <span className="mt-0.5 block text-[11px] text-indigo-500">
+                  🕐 {t.baslangic || "?"}{t.bitis ? ` — ${t.bitis}` : ""}
+                  {t.sureDakika != null && ` · ${sureMetin(t.sureDakika)}`}
                 </span>
               )}
               {yz > 0 && !t.done ? (

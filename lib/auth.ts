@@ -99,13 +99,14 @@ export async function kayitOl(ad: string, eposta: string, parola: string, soru: 
   return null;
 }
 
-export async function giris(eposta: string, parola: string): Promise<string | null> {
+export async function giris(eposta: string, parola: string, beniHatirla = false): Promise<string | null> {
   eposta = norm(eposta);
   const k = oku().find((x) => x.eposta === eposta);
   if (!k) return "Bu e-posta kayıtlı değil. Önce kayıt ol.";
   const ozet = await sha256("pw:" + eposta + ":" + parola);
   if (ozet !== k.parola) return "Parola hatalı.";
   localStorage.setItem(OTURUM, eposta);
+  hatirlaAyarla(eposta, beniHatirla);
   return null;
 }
 
@@ -120,9 +121,54 @@ export function oturum(): string | null {
 export function cikis() {
   try {
     localStorage.removeItem(OTURUM);
+    localStorage.removeItem(HATIRLA);
   } catch {
     /* yok say */
   }
+}
+
+// --- Beni hatırla ------------------------------------------------------
+// "Beni hatırla" işaretliyse oturum kapanınca da korunur ve otomatik
+// kilit devreye girmez. "Parolayı da kaydet" seçilirse giriş formu
+// bir sonraki açılışta doldurulur (yalnızca bu bilgisayarda saklanır).
+const HATIRLA = "hp-hatirla";
+
+export type Hatirlanan = { eposta: string; parola: string };
+
+export function hatirlanan(): Hatirlanan {
+  try {
+    const v = JSON.parse(localStorage.getItem(HATIRLA) || "null");
+    if (v && typeof v.eposta === "string" && v.eposta) {
+      return { eposta: v.eposta, parola: String(v.parola || "") };
+    }
+  } catch {
+    /* okunamadı */
+  }
+  return { eposta: "", parola: "" };
+}
+
+function hatirlaYaz(v: Hatirlanan | null) {
+  try {
+    if (v) localStorage.setItem(HATIRLA, JSON.stringify(v));
+    else localStorage.removeItem(HATIRLA);
+  } catch {
+    /* depolama dolu olabilir */
+  }
+}
+
+/** Oturum hatırlanmış mı (otomatik kilit devre dışı). */
+export function oturumHatirliMi(): boolean {
+  return !!hatirlanan().eposta;
+}
+
+/** Giriş sonrası: kullanıcı "beni hatırla" / "parolayı kaydet" dediyse sakla. */
+export function hatirlaAyarla(eposta: string, parolayiHatirla: boolean): void {
+  hatirlaYaz(parolayiHatirla ? { eposta, parola: "" } : null);
+}
+
+/** Parolayı da sakla (yalnızca "beni hatırla" seçiliyken anlamlı). */
+export function parolaHatirla(eposta: string, parola: string): void {
+  hatirlaYaz({ eposta, parola });
 }
 
 export function kullaniciAd(eposta: string): string {
