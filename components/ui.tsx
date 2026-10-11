@@ -329,6 +329,16 @@ export function KullaniciPaneli({
   cikisYap: () => void;
 }) {
   const [acik, setAcik] = useState(false);
+  /** Defter listesi toplanabilir; tercih hatırlanır */
+  const [defterAcik, setDefterAcik] = useState(true);
+  useEffect(() => {
+    try { setDefterAcik(localStorage.getItem("hp-defter-acik") !== "0"); } catch { /* yoksay */ }
+  }, []);
+  const defterDegistir = () =>
+    setDefterAcik((v) => {
+      try { localStorage.setItem("hp-defter-acik", v ? "0" : "1"); } catch { /* yoksay */ }
+      return !v;
+    });
   const basHarf = (ad || eposta).trim().charAt(0).toLocaleUpperCase("tr");
   const aktifDefter = db.ledgers.find((d) => d.id === db.aktif);
 
@@ -372,12 +382,24 @@ export function KullaniciPaneli({
               <GorunumAyarlari />
             </div>
 
-            {/* DEFTER */}
+            {/* DEFTER — toplanabilir liste */}
             <div className="border-b border-slate-100 py-1.5">
-              <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                Defter · {db.ledgers.length}
-              </div>
-              {db.ledgers.map((d) => (
+              <button
+                onClick={() => defterDegistir()}
+                title={defterAcik ? "Defter listesini gizle" : "Defter listesini göster"}
+                className="flex w-full items-center gap-1.5 px-3 pb-1 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 transition hover:text-slate-600"
+              >
+                <ChevronDown
+                  size={13}
+                  className={`shrink-0 transition-transform ${defterAcik ? "rotate-0" : "-rotate-90"}`}
+                />
+                <span className="flex-1">Defter · {db.ledgers.length}</span>
+                <span className="text-[9px] font-normal normal-case tracking-normal text-slate-300">
+                  {defterAcik ? "gizle" : "aç"}
+                </span>
+              </button>
+
+              {defterAcik && db.ledgers.map((d) => (
                 <div key={d.id} className="flex items-center">
                   <button
                     onClick={() => { setAktif(d.id); setAcik(false); }}
@@ -411,7 +433,7 @@ export function KullaniciPaneli({
               ))}
               <button
                 onClick={() => { setAcik(false); setView("rapor"); }}
-                className="mt-1 flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[12px] font-medium text-slate-600 transition hover:bg-slate-50"
+                className={`flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[12px] font-medium text-slate-600 transition hover:bg-slate-50 ${defterAcik ? "mt-1" : ""}`}
               >
                 <Plus size={13} /> Defter yönetimi (gizle, sil, hesaplar)
               </button>
