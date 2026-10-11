@@ -277,21 +277,39 @@ export function GorunumAyarlari() {
             </div>
             <div className="mt-2 flex items-center gap-1.5 border-t border-slate-100 pt-2">
               <button
-                onClick={() => uygula(y - 10)}
+                onClick={() => uygula(y - 5)}
                 className="h-8 w-8 shrink-0 rounded-lg bg-slate-100 text-[15px] font-bold text-slate-700 hover:bg-slate-200"
                 title="Uzaklaştır"
               >
                 −
               </button>
-              <div className="flex-1 text-center text-[13px] font-semibold">%{y}</div>
+              {/* İstediğiniz boyutu rakamla yazın: %55 ... %175 arası */}
+              <div className="relative flex-1">
+                <input
+                  type="number"
+                  min={50}
+                  max={200}
+                  step={1}
+                  value={y}
+                  onChange={(e) => setY(Math.min(200, Math.max(50, Number(e.target.value) || 100)))}
+                  onBlur={(e) => uygula(Number(e.target.value) || 100)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { uygula(Number((e.target as HTMLInputElement).value) || 100); (e.target as HTMLInputElement).blur(); } }}
+                  className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 pr-6 text-center text-[13px] font-semibold text-slate-800 outline-none focus:border-slate-900"
+                  title="İstediğiniz yüzdeyi yazın (50–200)"
+                />
+                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[12px] text-slate-400">%</span>
+              </div>
               <button
-                onClick={() => uygula(y + 10)}
+                onClick={() => uygula(y + 5)}
                 className="h-8 w-8 shrink-0 rounded-lg bg-slate-100 text-[15px] font-bold text-slate-700 hover:bg-slate-200"
                 title="Yakınlaştır"
               >
                 +
               </button>
             </div>
+            <p className="mt-1.5 px-1 text-[10px] leading-relaxed text-slate-400">
+              İstediğiniz boyutu yazabilirsiniz: %50 – %200 arası.
+            </p>
             <button
               onClick={() => uygula(100)}
               className="mt-1.5 w-full rounded-lg py-1.5 text-[12px] text-slate-500 hover:bg-slate-50"

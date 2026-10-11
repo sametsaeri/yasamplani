@@ -9,6 +9,7 @@ type ElektronApi = {
   veriOku: () => Promise<string | null>;
   kullanicilarYaz: (icerik: string) => Promise<boolean>;
   kullanicilarOku: () => Promise<string | null>;
+  pdfKaydet: (html: string, ad: string) => Promise<{ ok: boolean; yol?: string; iptal?: boolean; hata?: string }>;
 };
 
 declare global {
@@ -80,5 +81,15 @@ export async function dosyaKullanicilarOku(): Promise<string | null> {
     return await window.elektron!.kullanicilarOku();
   } catch {
     return null;
+  }
+}
+
+/** PDF kaydet: Chromium motoru ile Türkçe karakterler bozulmadan PDF üretilir. */
+export async function pdfKaydet(html: string, ad: string): Promise<{ ok: boolean; yol?: string; iptal?: boolean; hata?: string }> {
+  if (!elektronVar()) return { ok: false, hata: "Masaüstü uygulamasında çalışır." };
+  try {
+    return await window.elektron!.pdfKaydet(html, ad);
+  } catch (e) {
+    return { ok: false, hata: String(e) };
   }
 }

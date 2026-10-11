@@ -6,6 +6,9 @@ import type { Db } from "../lib/store";
 import { ayToplam, artanKategoriler, butceOneri, kategoriGider } from "../lib/finance";
 import { buAy, bugun, oncekiAy, para, trh, uid } from "../lib/format";
 import { csvAktar, indir, islemCsv } from "../lib/csv";
+import { dokumHtml, dokumIndir, dokumXls, type Dokum, type DokumSatir } from "../lib/dokum";
+import { bakiyeler } from "../lib/finance";
+import { pdfKaydet } from "../lib/elektron";
 import { otoListele, otoOku, type OtoBilgi } from "../lib/yedek";
 import { diskYedekListe, diskYedekOku, elektronVar } from "../lib/elektron";
 import {
@@ -42,6 +45,179 @@ type FisKayit = {
   hesap: string;
   taslak: IslemTaslak | null;
 };
+
+/** Cari / banka dökümü: hesap + dönem seçilir, PDF (Türkçe) veya XLS alınır. */
+export function DokumView({ db }: { db: Db }) {
+  const hesaplar = db.accounts.filter((a) => !a.gizli);
+  const [hesapId, setHesapId] = useState(hesaplar[0]?.id || "");
+  const [bas, setBas] = useState(buAy() + "-01");
+  const [bit, setBit] = useState(bugun());
+  const [mesaj, setMesaj] = useState("");
+
+  const hesap = db.accounts.find((h) => h.id === hesapId) || null;
+
+  /** Devir + hareketlerden döküm kurar. */
+  const dokumYap = (): Dokum | null => {
+    if (!hesap) return null;
+    const oncekiler = db.transactions.filter(
+      (t) => (t.account_id === hesap.id || t.to_account_id === hesap.id) && t.date < bas
+    );
+    const devir = Number(hesap.open) || 0;
+    const oncekiBakiye = bakiyeler([hesap], oncekiler)[hesap.id] || 0;
+
+    const ilgili = db.transactions
+      .filter((t) => (t.account_id === hesap.id || t.to_account_id === hesap.id) && t.date >= bas && t.date <= bit)
+      .sort((a, c) => (a.date < c.date ? -1 : 1));
+
+    let bakiye = oncekiBakiye;
+    let toplamBorc = 0;
+    let toplamAlacak = 0;
+    const satirlar: DokumSatir[] = ilgili.map((t) => {
+      const tut = Number(t.amount) || 0;
+      const cikan = t.type === "transfer" ? t.to_account_id === hesap.id : t.type === "expense";
+      const giren = t.type === "transfer" ? t.account_id === hesap.id : t.type === "income";
+      const borc = cikan ? tut : 0;
+      const alacak = giren ? tut : 0;
+      bakiye += alacak - borc;
+      toplamBorc += borc;
+      toplamAlacak += alacak;
+      return {
+        tarih: t.date,
+        tip: t.type === "income" ? "Gelir" : t.type === "expense" ? "Gider" : "Transfer",
+        aciklama: t.description || "(açıklamasız)",
+        kategori: t.category || "Diğer",
+        belge: t.doc && t.doc !== "yok" ? t.doc : "",
+        borc,
+        alacak,
+        bakiye
+      };
+    });
+
+    return {
+      baslik: hesap.type === "credit_card" ? "KREDİ KARTI DÖKÜMÜ" : hesap.type === "savings" ? "BANKA DÖKÜMÜ" : "CARİ HESAP DÖKÜMÜ",
+      hesapAdi: hesap.name,
+      hesapTipi: hesap.type === "credit_card" ? "Kredi Kartı" : hesap.type === "savings" ? "Banka / Birikim" : "Cari",
+      defterAdi: db.ledgers.find((l) => l.id === hesap.ledger_id)?.name || "-",
+      donemBaslangic: bas,
+      donemBitis: bit,
+      olusturma: new Date().toLocaleString("tr-TR"),
+      satirlar,
+      toplamBorc,
+      toplamAlacak,
+      ilkBakiye: oncekiBakiye,
+      sonBakiye: bakiye
+    };
+  };
+
+  const ad = (uzanti: string) => {
+    const d = dokumYap();
+    if (!d) return;
+    const temiz = d.hesapAdi.replace(/[^\p{L}\p{N}]+/gu, "-");
+    return `${d.baslik.toLocaleLowerCase("tr")}-${temiz}-${d.donemBitis}.${uzanti}`;
+  };
+
+  const xlsAl = () => {
+    const d = dokumYap();
+    if (!d) return;
+    if (!d.satirlar.length && !confirm("Bu dönemde hareket yok. Yine de döküm alınsın mı?")) return;
+    dokumIndir(ad("xls")!, dokumXls(d), "application/vnd.ms-excel;charset=utf-8");
+    setMesaj(`Excel dosyası indirildi: ${d.satirlar.length} hareket`);
+  };
+
+  const pdfAl = async () => {
+    const d = dokumYap();
+    if (!d) return;
+    const s = await pdfKaydet(dokumHtml(d), ad("pdf")!);
+    if (s.ok) setMesaj(`PDF kaydedildi: ${s.yol}`);
+    else if (!s.iptal) setMesaj(`PDF hatası: ${s.hata || "bilinmiyor"}`);
+  };
+
+  if (hesaplar.length === 0) return <Card><Bos yazi="Önce bir hesap aç." /></Card>;
+
+  const onizleme = dokumYap();
+
+  return (
+    <Card>
+      <Baslik sag={<span className="text-xs font-normal text-slate-400">Cari / banka dökümü</span>}>
+        Döküm Al (PDF · XLS)
+      </Baslik>
+      <p className="mb-3 text-[13px] text-slate-500">
+        Seçtiğin hesap ve dönem için Türkçe, tasnifli döküm. PDF'te başlık her sayfada tekrarlanır.
+      </p>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+        <Alan etiket="Hesap">
+          <select className={inp} value={hesapId} onChange={(e) => setHesapId(e.target.value)}>
+            {hesaplar.map((h) => (
+              <option key={h.id} value={h.id}>
+                {h.name} — {h.type === "credit_card" ? "Kredi Kartı" : h.type === "savings" ? "Banka" : "Cari"}
+              </option>
+            ))}
+          </select>
+        </Alan>
+        <Alan etiket="Başlangıç">
+          <input type="date" className={inp} value={bas} onChange={(e) => setBas(e.target.value)} />
+        </Alan>
+        <Alan etiket="Bitiş">
+          <input type="date" className={inp} value={bit} onChange={(e) => setBit(e.target.value)} />
+        </Alan>
+        <div className="flex items-end gap-2">
+          <Btn onClick={() => void pdfAl()}><Download size={14} className="mr-1 inline" /> PDF</Btn>
+          <Btn ghost onClick={xlsAl}>📊 XLS</Btn>
+        </div>
+      </div>
+
+      {mesaj && <div className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-[12px] text-emerald-700">{mesaj}</div>}
+
+      {onizleme && (
+        <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+          <table className="w-full text-[12.5px]">
+            <thead>
+              <tr className="bg-slate-900 text-left text-white">
+                <th className="p-2 font-medium">Tarih</th>
+                <th className="p-2 font-medium">Tür</th>
+                <th className="p-2 font-medium">Açıklama</th>
+                <th className="p-2 text-right font-medium">Borç</th>
+                <th className="p-2 text-right font-medium">Alacak</th>
+                <th className="p-2 text-right font-medium">Bakiye</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="bg-slate-100 font-semibold">
+                <td className="p-2" colSpan={5}>Devir ({trh(bas)} öncesi)</td>
+                <td className="p-2 text-right">{para(onizleme.ilkBakiye)}</td>
+              </tr>
+              {onizleme.satirlar.length === 0 && (
+                <tr><td className="p-4 text-center text-slate-400" colSpan={6}>Bu dönemde hareket yok.</td></tr>
+              )}
+              {onizleme.satirlar.slice(0, 60).map((s, i) => (
+                <tr key={i} className={i % 2 ? "bg-slate-50" : ""}>
+                  <td className="p-2 whitespace-nowrap">{trh(s.tarih)}</td>
+                  <td className="p-2">{s.tip}</td>
+                  <td className="p-2">{s.aciklama}</td>
+                  <td className="p-2 text-right tabular-nums">{s.borc ? para(s.borc) : ""}</td>
+                  <td className="p-2 text-right tabular-nums">{s.alacak ? para(s.alacak) : ""}</td>
+                  <td className="p-2 text-right font-semibold tabular-nums">{para(s.bakiye)}</td>
+                </tr>
+              ))}
+              <tr className="bg-slate-900 font-semibold text-white">
+                <td className="p-2" colSpan={3}>TOPLAM ({onizleme.satirlar.length} hareket)</td>
+                <td className="p-2 text-right tabular-nums">{para(onizleme.toplamBorc)}</td>
+                <td className="p-2 text-right tabular-nums">{para(onizleme.toplamAlacak)}</td>
+                <td className="p-2 text-right tabular-nums">{para(onizleme.sonBakiye)}</td>
+              </tr>
+            </tbody>
+          </table>
+          {onizleme.satirlar.length > 60 && (
+            <div className="border-t border-slate-100 px-3 py-2 text-center text-[11px] text-slate-400">
+              İlk 60 hareket gösteriliyor — dosyada tamamı yer alır.
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
 
 export function RaporView({ db, setDb, replaceAll, anahtar }: Props & { anahtar: string }) {
   const aktifDefter = db.ledgers.find((d) => d.id === db.aktif);
@@ -436,6 +612,8 @@ export function RaporView({ db, setDb, replaceAll, anahtar }: Props & { anahtar:
           {izin === "desteklenmiyor" && " ⚠ Bu ortam masaüstü bildirimini desteklemiyor."}
         </p>
       </Card>
+
+      <DokumView db={db} />
 
       <Card>
         <Baslik>Veri & Arşiv</Baslik>

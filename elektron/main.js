@@ -105,6 +105,32 @@ ipcMain.handle("kullanicilar-yaz", (_olay, icerik) => {
   }
 });
 
+// --- PDF dökümü ---
+// Chromium'un kendi PDF motoru kullanılır: Türkçe karakterler (ğüşıöçĞÜŞİÖÇ)
+// sorunsuz gömülür. Gizli pencerede döküm açılır, PDF üretilip kaydedilir.
+ipcMain.handle("pdf-kaydet", async (_olay, html, varsayilanAd) => {
+  if (!pencere) return { ok: false, hata: "Pencere yok" };
+  const { dialog } = require("electron");
+  try {
+    const sonuc = await dialog.showSaveDialog(pencere, {
+      title: "PDF kaydet",
+      defaultPath: path.join(app.getPath("documents"), String(varsayilanAd || "dokum.pdf")),
+      filters: [{ name: "PDF", extensions: ["pdf"] }]
+    });
+    if (sonuc.canceled || !sonuc.filePath) return { ok: false, iptal: true };
+    const veri = await pencere.webContents.printToPDF({
+      printBackground: true,
+      pageSize: "A4",
+      margins: { marginType: "custom", top: 0.55, bottom: 0.55, left: 0.47, right: 0.47 },
+      preferCSSPageSize: true
+    });
+    fs.writeFileSync(sonuc.filePath, veri);
+    return { ok: true, yol: sonuc.filePath };
+  } catch (e) {
+    return { ok: false, hata: String(e && e.message ? e.message : e) };
+  }
+});
+
 function ac() {
   pencere = new BrowserWindow({
     width: 1360,
