@@ -13,7 +13,9 @@ app.setAppUserModelId("com.hesapplanim.app");
 // Mutlak yol sorunu next.config.mjs içindeki `assetPrefix: "./"` ile çözülür.
 
 let pencere = null;
-const AZAMI_DOSYA = 10;
+// Yedek sayısı 1: her yeni yedek bir öncekinin üstüne yazılır, yer kaplamaz.
+// (İstenirse 2-3 yapılabilir; 10 fazla yer tutuyordu.)
+const AZAMI_DOSYA = 1;
 
 function yedekKlasor() {
   const k = path.join(app.getPath("userData"), "yedekler");

@@ -4,7 +4,9 @@ export type OtoBilgi = { id: string; tarih: string; boyut: number };
 
 const ANA = (k: string) => `hp-otoyedek:${k}`;
 const ZAMAN = (k: string) => `hp-otoyedek-zaman:${k}`;
-const AZAMI = 5;
+// Anlık görüntü sayısı 1: her yeni kayıt bir öncekinin üstüne yazılır.
+// Böylece tarayıcı deposu şişmez, yer kaplamaz. (İstenirse artırılabilir.)
+const AZAMI = 1;
 const SURE = 120000;
 const BOYUT = 4000000;
 

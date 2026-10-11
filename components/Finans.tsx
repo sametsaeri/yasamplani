@@ -77,6 +77,8 @@ export default function Finans({ db, setDb }: Props) {
   const [hGizle, setHGizle] = useState(false);
 
   const [inceleId, setInceleId] = useState<string | null>(null);
+  /** ⋮ menüsünden açılan hesap yönetim penceresi */
+  const [yonetHesapId, setYonetHesapId] = useState<string | null>(null);
 
   const [txModal, setTxModal] = useState(false);
   const [tx, setTx] = useState<TxForm>({ ...BOS_TX, date: bugun() });
@@ -316,6 +318,8 @@ export default function Finans({ db, setDb }: Props) {
         setDb((d) => ({ ...d, transactions: [...d.transactions, ...yeni] }));
         setTxModal(false);
         setTaksitAcik(false);
+        // Kayıt sonrası ilgili hesap sayfasında kal (defter listesine dönme)
+        setInceleId(kayit.account_id);
         return;
       }
       setDb((d) => ({ ...d, transactions: [...d.transactions, kayit] }));
@@ -323,6 +327,8 @@ export default function Finans({ db, setDb }: Props) {
       setDb((d) => ({ ...d, transactions: d.transactions.map((o) => (o.id === kayit.id ? kayit : o)) }));
     }
     setTxModal(false);
+    // Düzenleme veya kayıt sonrası ilgili hesabın hareketleri ekranda kalsın
+    if (!inceleId && kayit.account_id) setInceleId(kayit.account_id);
   };
 
   const txSil = (id: string) => {
@@ -473,25 +479,147 @@ export default function Finans({ db, setDb }: Props) {
 
   const sablonlar = db.sablonlar.filter((s) => s.ledger_id === db.aktif);
 
-  // Hesap detayı ayrı bir alt sayfa: geride başka hesap/defter görünmesin
-  if (inceleHesap) {
-    return (
-      <HesapDetay
-        db={db}
-        setDb={setDb}
-        hesap={inceleHesap}
-        islemAc={(id) => { setInceleId(null); txAc(undefined, id); }}
-        txDuzenle={(t) => { setInceleId(null); txAc(t); }}
-        kapat={() => setInceleId(null)}
-      />
-    );
-  }
+  // Hesap detayı ayrı bir alt sayfa: geride başka hesap/defter görünmesin.
+  // DİKKAT: Burada erken "return" yapılmaz; aksi halde aşağıdaki işlem modalı
+  // hiç render edilmez ve hesap sayfasından "İşlem Ekle" çalışmaz.
+  const hesapDetaySayfasi = inceleHesap ? (
+    <HesapDetay
+      db={db}
+      setDb={setDb}
+      hesap={inceleHesap}
+      islemAc={(id) => { txAc(undefined, id); }}
+      txDuzenle={(t) => { txAc(t); }}
+      kapat={() => setInceleId(null)}
+      yonetHesapAc={(id) => setYonetHesapId(id)}
+    />
+  ) : null;
+
+  // Hesap yönetim penceresi (kontrol, mutabakat, detay) — hesap kartının ⋮ düğmesinden
+  const yonetHesap = yonetHesapId ? db.accounts.find((a) => a.id === yonetHesapId) : undefined;
+
+  // İşlem penceresi koşullu div'in DIŞINDA tanımlanır: hesap detayı
+  // ekranındayken de açılabilsin (erken return yüzünden render edilmiyordu).
+  const txModalGovde = (
+      <Modal acik={txModal} kapat={() => setTxModal(false)}
+        baslik={
+          <span className="flex items-center gap-2">
+            <span className={txGizli ? "blur-[5px] select-none transition" : ""}>
+              {tx.id ? "İşlemi Düzenle" : "Yeni İşlem"} • {aktifDefter.name}
+            </span>
+          </span>
+        }
+        sag={
+          <Btn kucuk ghost onClick={() => setTxGizli((v) => !v)} title="Yanında biri varsa rakamları gizle">
+            {txGizli ? "👁 Göster" : "🙈 Gizle"}
+          </Btn>
+        }
+      >
+        <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${txGizli ? "blur-[5px] select-none transition" : ""}`}>
+          <Alan etiket="Tür">
+            <select className={inp} value={tx.type} onChange={(e) => setTx({ ...tx, type: e.target.value as Tx["type"] })}>
+              <option value="expense">Gider</option><option value="income">Gelir</option><option value="transfer">Transfer</option>
+            </select>
+          </Alan>
+          <Alan etiket="Tarih"><input type="date" className={inp} value={tx.date} onChange={(e) => setTx({ ...tx, date: e.target.value })} /></Alan>
+          <Alan etiket="Tutar (₺)">
+            <ParaGirisi value={tx.amount} onChange={(metin) => setTx({ ...tx, amount: metin })} />
+          </Alan>
+          <Alan etiket="Kategori">
+            <select className={inp} value={tx.category} onChange={(e) => setTx({ ...tx, category: e.target.value })}>
+              {KATEGORILER.map((k) => <option key={k}>{k}</option>)}
+            </select>
+          </Alan>
+          {txHesapSabit ? (
+            /* Hesap kilitli: diğer hesapların adı ekranda görünmez (gizlilik) */
+            <Alan etiket="Hesap">
+              <div className={`flex items-center gap-2 rounded-[9px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm ${txGizli ? "blur-[5px] select-none" : ""}`}>
+                <HesapIkon tip={db.accounts.find((h) => h.id === txHesapSabit)?.type || "current"} />
+                <span className="font-medium">
+                  {db.accounts.find((h) => h.id === txHesapSabit)?.name || "Hesap"}
+                </span>
+                <span className="ml-auto text-[11px] text-slate-400">🔒 sabit</span>
+              </div>
+            </Alan>
+          ) : (
+            <Alan etiket="Hesap">
+              <select className={inp} value={tx.account_id} onChange={(e) => setTx({ ...tx, account_id: e.target.value })}>
+                {hesaplar.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+              </select>
+            </Alan>
+          )}
+          {tx.type === "transfer" && (
+            <Alan etiket="Hedef hesap (aynı defter)">
+              {hedefAcik ? (
+                <select className={inp} value={tx.to_account_id} onChange={(e) => setTx({ ...tx, to_account_id: e.target.value })}>
+                  <option value="">—</option>
+                  {hesaplar.filter((h) => h.id !== tx.account_id).map((h) => (
+                    <option key={h.id} value={h.id}>{h.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <button type="button" onClick={() => setHedefAcik(true)}
+                  className="w-full rounded-[9px] border border-dashed border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-500 hover:border-slate-400">
+                  {tx.to_account_id
+                    ? db.accounts.find((h) => h.id === tx.to_account_id)?.name || "Seçildi"
+                    : "+ Hedef hesabı seç"}
+                </button>
+              )}
+            </Alan>
+          )}
+          <Alan etiket="Belge türü">
+            <select className={inp} value={tx.doc} onChange={(e) => setTx({ ...tx, doc: e.target.value as Tx["doc"] })}>
+              <option value="yok">Yok</option><option value="cek">Çek</option><option value="fatura">Fatura</option>
+            </select>
+          </Alan>
+          {(tx.doc === "cek" || tx.doc === "fatura") && (
+            <Alan etiket="Vade tarihi"><input type="date" className={inp} value={tx.due} onChange={(e) => setTx({ ...tx, due: e.target.value })} /></Alan>
+          )}
+          <div className="sm:col-span-2"><Alan etiket="Açıklama"><input className={inp} value={tx.description} onChange={(e) => setTx({ ...tx, description: e.target.value })} placeholder="örn: Market alışverişi" /></Alan></div>
+          {tx.type !== "transfer" && (
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <input type="checkbox" checked={tx.paid} onChange={(e) => setTx({ ...tx, paid: e.target.checked })} /> Ödendi / gerçekleşti
+            </label>
+          )}
+          {tx.type !== "transfer" && !tx.id && (
+            <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input type="checkbox" checked={taksitAcik} onChange={(e) => setTaksitAcik(e.target.checked)} />
+                📅 Taksitli işlem oluştur
+              </label>
+              {taksitAcik && (
+                <div className="mt-2 flex flex-wrap items-end gap-3">
+                  <Alan etiket="Taksit sayısı">
+                    <input className={`${inp} w-24`} value={taksitSayi} onChange={(e) => setTaksitSayi(e.target.value.replace(/\D/g, "").slice(0, 2))} placeholder="3" />
+                  </Alan>
+                  <p className="text-xs leading-relaxed text-slate-500">
+                    Tutar <b>{taksitSayi || "?"}</b> eşit parçaya bölünür; her taksit ayrı satır olur, tarihler
+                    her ay aynı güne kayar. İlk taksit bugün, sonrakiler <b>{tx.date}</b> baz alınarak.
+                    Ödenmemiş taksitler vade takvimine düşer.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="mt-4 flex justify-end gap-2"><Btn ghost onClick={() => setTxModal(false)}>Vazgeç</Btn><Btn onClick={txKaydet}>Kaydet</Btn></div>
+      </Modal>
+  );
 
   return (
-    <div className="space-y-3">
-      {/* Defter başlığı: yalnızca AKTİF defter görünür. Defter yönetimi
-          istenirse altındaki "Defterler" düğmesiyle açılır — böylece bir
-          deftere girince diğer defterlerin bilgisi ekranda durmaz. */}
+    <>
+      {txModalGovde}
+      {yonetHesap && (
+        <HesapYonetim
+          db={db}
+          setDb={setDb}
+          hesap={yonetHesap}
+          kapat={() => setYonetHesapId(null)}
+          duzenle={() => { hesapAc(yonetHesap.id); }}
+          incele={() => setInceleId(yonetHesap.id)}
+        />
+      )}
+      {hesapDetaySayfasi || (
+      <div className="space-y-3">
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -683,7 +811,7 @@ export default function Finans({ db, setDb }: Props) {
                 <div key={h.id} className="rounded-xl border border-slate-200 bg-white p-3 transition hover:shadow-md">
                   <div className="flex items-center gap-2">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700"><HesapIkon tip={h.type} /></span>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <b className="truncate">{h.name}</b>
                         {h.gizli && <span title="Gizli hesap — listede gizli">🙈</span>}
@@ -691,6 +819,14 @@ export default function Finans({ db, setDb }: Props) {
                       </div>
                       <div className="text-xs text-slate-500">{HESAP_TIP_AD[h.type]}</div>
                     </div>
+                    {/* ⋮ Hesap yönetimi: detay, kontrol, mutabakat, gizle, sil */}
+                    <button
+                      onClick={() => setYonetHesapId(h.id)}
+                      title="Hesap yönetimi"
+                      className="shrink-0 rounded-lg border border-slate-200 px-2 py-1 text-[15px] leading-none text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                    >
+                      ⋮
+                    </button>
                   </div>
                   <div className={`mt-1 text-xl font-bold ${x >= 0 ? "text-green-600" : "text-red-600"}`}>{pbPara(x)}</div>
                   {/* Base44: Son Ödeme (kredi kartı) / Vade günü (cari) */}
@@ -717,7 +853,6 @@ export default function Finans({ db, setDb }: Props) {
                     <Btn kucuk ghost onClick={() => hesapGizle(h.id)} title={h.gizli ? "Hesabı göster" : "Hesabı gizle (listeden kaldır, veriler durur)"}>
                       {h.gizli ? "👁 Göster" : "🙈 Gizle"}
                     </Btn>
-                    <SilBtn onClick={() => hesapSil(h.id)} />
                   </div>
                 </div>
               );
@@ -974,119 +1109,141 @@ export default function Finans({ db, setDb }: Props) {
         <div className="mt-4 flex justify-end gap-2"><Btn ghost onClick={() => setHesapModal(false)}>Vazgeç</Btn><Btn onClick={hesapKaydet}>Kaydet</Btn></div>
       </Modal>
 
-      <Modal acik={txModal} kapat={() => setTxModal(false)}
-        baslik={
-          <span className="flex items-center gap-2">
-            <span className={txGizli ? "blur-[5px] select-none transition" : ""}>
-              {tx.id ? "İşlemi Düzenle" : "Yeni İşlem"} • {aktifDefter.name}
-            </span>
-          </span>
-        }
-        sag={
-          <Btn kucuk ghost onClick={() => setTxGizli((v) => !v)} title="Yanında biri varsa rakamları gizle">
-            {txGizli ? "👁 Göster" : "🙈 Gizle"}
-          </Btn>
-        }
-      >
-        <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${txGizli ? "blur-[5px] select-none transition" : ""}`}>
-          <Alan etiket="Tür">
-            <select className={inp} value={tx.type} onChange={(e) => setTx({ ...tx, type: e.target.value as Tx["type"] })}>
-              <option value="expense">Gider</option><option value="income">Gelir</option><option value="transfer">Transfer</option>
-            </select>
-          </Alan>
-          <Alan etiket="Tarih"><input type="date" className={inp} value={tx.date} onChange={(e) => setTx({ ...tx, date: e.target.value })} /></Alan>
-          <Alan etiket="Tutar (₺)">
-            <ParaGirisi value={tx.amount} onChange={(metin) => setTx({ ...tx, amount: metin })} />
-          </Alan>
-          <Alan etiket="Kategori">
-            <select className={inp} value={tx.category} onChange={(e) => setTx({ ...tx, category: e.target.value })}>
-              {KATEGORILER.map((k) => <option key={k}>{k}</option>)}
-            </select>
-          </Alan>
-          {txHesapSabit ? (
-            /* Hesap kilitli: diğer hesapların adı ekranda görünmez (gizlilik) */
-            <Alan etiket="Hesap">
-              <div className={`flex items-center gap-2 rounded-[9px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm ${txGizli ? "blur-[5px] select-none" : ""}`}>
-                <HesapIkon tip={db.accounts.find((h) => h.id === txHesapSabit)?.type || "current"} />
-                <span className="font-medium">
-                  {db.accounts.find((h) => h.id === txHesapSabit)?.name || "Hesap"}
-                </span>
-                <span className="ml-auto text-[11px] text-slate-400">🔒 sabit</span>
-              </div>
-            </Alan>
-          ) : (
-            <Alan etiket="Hesap">
-              <select className={inp} value={tx.account_id} onChange={(e) => setTx({ ...tx, account_id: e.target.value })}>
-                {hesaplar.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
-              </select>
-            </Alan>
-          )}
-          {tx.type === "transfer" && (
-            <Alan etiket="Hedef hesap (aynı defter)">
-              {hedefAcik ? (
-                <select className={inp} value={tx.to_account_id} onChange={(e) => setTx({ ...tx, to_account_id: e.target.value })}>
-                  <option value="">—</option>
-                  {hesaplar.filter((h) => h.id !== tx.account_id).map((h) => (
-                    <option key={h.id} value={h.id}>{h.name}</option>
-                  ))}
-                </select>
-              ) : (
-                <button type="button" onClick={() => setHedefAcik(true)}
-                  className="w-full rounded-[9px] border border-dashed border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-500 hover:border-slate-400">
-                  {tx.to_account_id
-                    ? db.accounts.find((h) => h.id === tx.to_account_id)?.name || "Seçildi"
-                    : "+ Hedef hesabı seç"}
-                </button>
-              )}
-            </Alan>
-          )}
-          <Alan etiket="Belge türü">
-            <select className={inp} value={tx.doc} onChange={(e) => setTx({ ...tx, doc: e.target.value as Tx["doc"] })}>
-              <option value="yok">Yok</option><option value="cek">Çek</option><option value="fatura">Fatura</option>
-            </select>
-          </Alan>
-          {(tx.doc === "cek" || tx.doc === "fatura") && (
-            <Alan etiket="Vade tarihi"><input type="date" className={inp} value={tx.due} onChange={(e) => setTx({ ...tx, due: e.target.value })} /></Alan>
-          )}
-          <div className="sm:col-span-2"><Alan etiket="Açıklama"><input className={inp} value={tx.description} onChange={(e) => setTx({ ...tx, description: e.target.value })} placeholder="örn: Market alışverişi" /></Alan></div>
-          {tx.type !== "transfer" && (
-            <label className="flex items-center gap-2 text-sm sm:col-span-2">
-              <input type="checkbox" checked={tx.paid} onChange={(e) => setTx({ ...tx, paid: e.target.checked })} /> Ödendi / gerçekleşti
-            </label>
-          )}
-          {tx.type !== "transfer" && !tx.id && (
-            <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
-              <label className="flex items-center gap-2 text-sm font-medium">
-                <input type="checkbox" checked={taksitAcik} onChange={(e) => setTaksitAcik(e.target.checked)} />
-                📅 Taksitli işlem oluştur
-              </label>
-              {taksitAcik && (
-                <div className="mt-2 flex flex-wrap items-end gap-3">
-                  <Alan etiket="Taksit sayısı">
-                    <input className={`${inp} w-24`} value={taksitSayi} onChange={(e) => setTaksitSayi(e.target.value.replace(/\D/g, "").slice(0, 2))} placeholder="3" />
-                  </Alan>
-                  <p className="text-xs leading-relaxed text-slate-500">
-                    Tutar <b>{taksitSayi || "?"}</b> eşit parçaya bölünür; her taksit ayrı satır olur, tarihler
-                    her ay aynı güne kayar. İlk taksit bugün, sonrakiler <b>{tx.date}</b> baz alınarak.
-                    Ödenmemiş taksitler vade takvimine düşer.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="mt-4 flex justify-end gap-2"><Btn ghost onClick={() => setTxModal(false)}>Vazgeç</Btn><Btn onClick={txKaydet}>Kaydet</Btn></div>
-      </Modal>
 
       {/* Hesap detayı artık yukarıda tam sayfa olarak dönüyor (modal değil) */}
       {/* Defter silme onayı artık Ayarlar → 🗂 Defter Yönetimi bölümünde */}
-    </div>
+      </div>
+      )}
+    </>
   );
 }
 
-function HesapDetay({ db, setDb, hesap, islemAc, txDuzenle, kapat }: {
+/** Hesap yönetim penceresi: kart üzerindeki ⋮ düğmesinden açılır.
+ *  Hesap detayı, kontrol, mutabakat, gizleme ve silme tek yerde toplanır. */
+function HesapYonetim({ db, setDb, hesap, kapat, duzenle, incele }: {
+  db: Db; setDb: (u: (d: Db) => Db) => void; hesap: Account;
+  kapat: () => void; duzenle: () => void; incele: () => void;
+}) {
+  const [kontrolTarih, setKontrolTarih] = useState(hesap.sonKontrolTarih || "");
+  const [kontrolBakiye, setKontrolBakiye] = useState(
+    hesap.sonKontrolBakiye != null ? String(hesap.sonKontrolBakiye).replace(".", ",") : ""
+  );
+  const [mutabakatTarih, setMutabakatTarih] = useState(hesap.mutabakatTarih || "");
+  const [mutabakatBakiye, setMutabakatBakiye] = useState(
+    hesap.mutabakatBakiye != null ? String(hesap.mutabakatBakiye).replace(".", ",") : ""
+  );
+  const gercek = bakiyeler([hesap], db.transactions)[hesap.id] || 0;
+  const donem = donemOzeti(hesap, db.transactions);
+  const kart = hesap.type === "credit_card";
+
+  const kaydet = (y: Partial<Account>) => setDb((d) => ({
+    ...d, accounts: d.accounts.map((h) => (h.id === hesap.id ? { ...h, ...y } : h))
+  }));
+
+  const fark = (b: number) => Math.abs(b - gercek) > 0.005;
+
+  return (
+    <Modal acik kapat={kapat} baslik={`Hesap Yönetimi • ${hesap.name}`}>
+      {/* ÖZET */}
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="rounded-xl bg-slate-50 p-2.5">
+          <div className="text-[10px] uppercase text-slate-400">Güncel Bakiye</div>
+          <div className={`text-[15px] font-bold ${gercek >= 0 ? "text-green-600" : "text-red-600"}`}>{para(gercek)}</div>
+        </div>
+        {kart && (
+          <>
+            <div className="rounded-xl bg-slate-50 p-2.5">
+              <div className="text-[10px] uppercase text-slate-400">Dönem Borcu</div>
+              <div className="text-[15px] font-bold">{para(donem.harcama)}</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-2.5">
+              <div className="text-[10px] uppercase text-slate-400">Son Ödeme</div>
+              <div className="text-[15px] font-bold">{trh(donem.sonOdeme)}</div>
+            </div>
+          </>
+        )}
+        <div className="rounded-xl bg-slate-50 p-2.5">
+          <div className="text-[10px] uppercase text-slate-400">Tür</div>
+          <div className="text-[15px] font-bold">{HESAP_TIP_AD[hesap.type]}</div>
+        </div>
+      </div>
+
+      {/* KONTROL */}
+      <div className="mb-4 rounded-xl border border-slate-200 p-3">
+        <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+          🔍 Son Bakiye Kontrolü
+        </div>
+        {hesap.sonKontrolTarih && (
+          <div className="mb-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[12px]">
+            Kayıtlı: <b>{trh(hesap.sonKontrolTarih)}</b> · <b>{para(hesap.sonKontrolBakiye || 0)}</b>
+            {fark(hesap.sonKontrolBakiye || 0) && (
+              <span className="ml-1 font-semibold text-amber-600">
+                (uyumsuz {para(gercek - (hesap.sonKontrolBakiye || 0))})
+              </span>
+            )}
+          </div>
+        )}
+        <div className="flex flex-wrap items-end gap-2">
+          <Alan etiket="Kontrol tarihi">
+            <input type="date" className={inp} value={kontrolTarih} onChange={(e) => setKontrolTarih(e.target.value)} />
+          </Alan>
+          <Alan etiket="Görünen bakiye">
+            <ParaGirisi value={kontrolBakiye} onChange={setKontrolBakiye} className="w-32" />
+          </Alan>
+          <Btn kucuk onClick={() => {
+            if (!kontrolTarih) return alert("Kontrol tarihi gir.");
+            kaydet({ sonKontrolTarih: kontrolTarih, sonKontrolBakiye: parayaCevir(kontrolBakiye) });
+          }}>Kaydet</Btn>
+        </div>
+      </div>
+
+      {/* MUTABAKAT */}
+      <div className="mb-4 rounded-xl border border-slate-200 p-3">
+        <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+          ✅ Son Hesap Mutabakatı
+        </div>
+        {hesap.mutabakatTarih && (
+          <div className="mb-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[12px]">
+            Kayıtlı: <b>{trh(hesap.mutabakatTarih)}</b> · <b>{para(hesap.mutabakatBakiye || 0)}</b>
+            {fark(hesap.mutabakatBakiye || 0) && (
+              <span className="ml-1 font-semibold text-amber-600">
+                (uyumsuz {para(gercek - (hesap.mutabakatBakiye || 0))})
+              </span>
+            )}
+          </div>
+        )}
+        <div className="flex flex-wrap items-end gap-2">
+          <Alan etiket="Mutabakat tarihi">
+            <input type="date" className={inp} value={mutabakatTarih} onChange={(e) => setMutabakatTarih(e.target.value)} />
+          </Alan>
+          <Alan etiket="Eşleşen bakiye">
+            <ParaGirisi value={mutabakatBakiye} onChange={setMutabakatBakiye} className="w-32" />
+          </Alan>
+          <Btn kucuk onClick={() => {
+            if (!mutabakatTarih) return alert("Mutabakat tarihi gir.");
+            kaydet({ mutabakatTarih, mutabakatBakiye: parayaCevir(mutabakatBakiye) });
+          }}>Kaydet</Btn>
+          <Btn kucuk ghost onClick={() => {
+            if (!mutabakatTarih) return alert("Mutabakat tarihi gir.");
+            kaydet({ mutabakatTarih, mutabakatBakiye: gercek });
+          }}>Güncel bakiyeyi yaz</Btn>
+        </div>
+      </div>
+
+      {/* EYLEMLER */}
+      <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+        <Btn kucuk onClick={() => { kapat(); incele(); }}>Hareketleri gör</Btn>
+        <Btn kucuk ghost onClick={() => { kapat(); duzenle(); }}>Hesabı düzenle</Btn>
+        <SilBtn onClick={() => kapat()}>Kapat</SilBtn>
+      </div>
+    </Modal>
+  );
+}
+
+function HesapDetay({ db, setDb, hesap, islemAc, txDuzenle, kapat, yonetHesapAc }: {
   db: Db; setDb: (u: (d: Db) => Db) => void; hesap: Account;
   islemAc: (id: string) => void; txDuzenle: (t: Tx) => void; kapat: () => void;
+  yonetHesapAc: (id: string) => void;
 }) {
   const [odeForm, setOdeForm] = useState(false);
   const [odeTutar, setOdeTutar] = useState("");
@@ -1219,6 +1376,7 @@ function HesapDetay({ db, setDb, hesap, islemAc, txDuzenle, kapat }: {
         <div className="no-print flex gap-2">
           <Btn kucuk ghost onClick={csv}>⬇ CSV</Btn>
           <Btn kucuk ghost onClick={() => window.print()}>🖨 PDF</Btn>
+          <Btn kucuk ghost onClick={() => yonetHesapAc(hesap.id)} title="Kontrol, mutabakat, hesap bilgileri">⋮ Yönet</Btn>
           <Btn kucuk onClick={() => islemAc(hesap.id)}>+ İşlem Ekle</Btn>
         </div>
       </div>
@@ -1276,57 +1434,18 @@ function HesapDetay({ db, setDb, hesap, islemAc, txDuzenle, kapat }: {
         </Card>
       )}
 
-      {/* Son bakiye kontrolü ve hesap mutabakatı */}
+      {/* Kontrol & mutabakat artık hesap kartındaki ⋮ menüsünden yönetilir. */}
       <Card className="mb-3">
-        <Baslik>Kontrol & Mutabakat</Baslik>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <div className="mb-2 text-xs font-medium text-slate-500">🔍 Son Bakiye Kontrolü</div>
-            {hesap.sonKontrolTarih ? (
-              <div className="mb-2 rounded-lg bg-slate-50 p-2 text-[13px]">
-                <div className="text-slate-500">Son kontrol</div>
-                <b>{trh(hesap.sonKontrolTarih)}</b> · <b>{para(hesap.sonKontrolBakiye || 0)}</b>
-                {hesap.sonKontrolBakiye != null && Math.abs((hesap.sonKontrolBakiye || 0) - x) > 0.005 && (
-                  <span className="ml-1 text-amber-600">(uyumsuz {para(x - (hesap.sonKontrolBakiye || 0))})</span>
-                )}
-              </div>
-            ) : (
-              <div className="mb-2 text-xs text-slate-400">Henüz kontrol girilmedi.</div>
-            )}
-            <div className="flex flex-wrap items-end gap-2">
-              <Alan etiket="Kontrol tarihi">
-                <input type="date" className={inp} value={kontrolTarih} onChange={(e) => setKontrolTarih(e.target.value)} />
-              </Alan>
-              <Alan etiket="Görünen bakiye">
-                <ParaGirisi value={kontrolBakiye} onChange={(m) => setKontrolBakiye(m)} className="w-32" />
-              </Alan>
-              <Btn kucuk onClick={kontrolEt}>Kaydet</Btn>
-            </div>
-          </div>
-          <div>
-            <div className="mb-2 text-xs font-medium text-slate-500">✅ Son Hesap Mutabakatı</div>
-            {hesap.mutabakatTarih ? (
-              <div className="mb-2 rounded-lg bg-slate-50 p-2 text-[13px]">
-                <div className="text-slate-500">Son mutabakat</div>
-                <b>{trh(hesap.mutabakatTarih)}</b> · <b>{para(hesap.mutabakatBakiye || 0)}</b>
-                {hesap.mutabakatBakiye != null && Math.abs((hesap.mutabakatBakiye || 0) - x) > 0.005 && (
-                  <span className="ml-1 text-amber-600">(uyumsuz {para(x - (hesap.mutabakatBakiye || 0))})</span>
-                )}
-              </div>
-            ) : (
-              <div className="mb-2 text-xs text-slate-400">Henüz mutabakat girilmedi.</div>
-            )}
-            <div className="flex flex-wrap items-end gap-2">
-              <Alan etiket="Mutabakat tarihi">
-                <input type="date" className={inp} value={mutabakatTarih} onChange={(e) => setMutabakatTarih(e.target.value)} />
-              </Alan>
-              <Alan etiket="Eşleşen bakiye">
-                <ParaGirisi value={mutabakatBakiye} onChange={(m) => setMutabakatBakiye(m)} className="w-32" />
-              </Alan>
-              <Btn kucuk onClick={mutabakatEt}>Kaydet</Btn>
-              <Btn kucuk ghost onClick={() => mutabakatEt()}>Hesapla & Tamamla</Btn>
-            </div>
-          </div>
+        <Baslik sag={<Btn kucuk ghost onClick={() => yonetHesapAc(hesap.id)}>⋮ Kontrol & Mutabakat</Btn>}>
+          Hesap Bilgileri
+        </Baslik>
+        <div className="flex flex-wrap gap-2 text-[12.5px] text-slate-600">
+          <span>Tür: <b>{HESAP_TIP_AD[hesap.type]}</b></span>
+          <span>Ekstre: <b>{hesap.ekstre ? hesap.ekstre + ". gün" : "-"}</b></span>
+          <span>Vade: <b>{hesap.vadeFark ? hesap.vadeFark + " gün" : "-"}</b></span>
+          {hesap.limit ? <span>Limit: <b>{para(hesap.limit)}</b></span> : null}
+          {hesap.sonKontrolTarih ? <span>Son kontrol: <b>{trh(hesap.sonKontrolTarih)}</b></span> : null}
+          {hesap.mutabakatTarih ? <span>Son mutabakat: <b>{trh(hesap.mutabakatTarih)}</b></span> : null}
         </div>
       </Card>
       {hesap.type === "credit_card" && hesap.limit ? (
