@@ -1165,6 +1165,14 @@ export default function Finans({ db, setDb }: Props) {
   );
 }
 
+/** Hesap detayında gösterilebilen paneller. Hesap ⋮ menüsünden yönetilir. */
+const HESAP_WIDGETLAR: { kod: string; ad: string }[] = [
+  { kod: "ozet", ad: "Özet (bakiye, gelen, giden)" },
+  { kod: "donem", ad: "Dönem Borcu (kredi kartı)" },
+  { kod: "bilgi", ad: "Hesap Bilgileri" },
+  { kod: "hareket", ad: "Hareket Listesi (filtreler + tablo)" }
+];
+
 /** Hesap yönetim penceresi: kart üzerindeki ⋮ düğmesinden açılır.
  *  Hesap detayı, kontrol, mutabakat, gizleme ve silme tek yerde toplanır. */
 /** Finans ekranında gösterilebilen paneller. Sıra ekranda böyledir. */
@@ -1225,6 +1233,14 @@ function HesapYonetim({ db, setDb, hesap, kapat, duzenle, incele }: {
   db: Db; setDb: (u: (d: Db) => Db) => void; hesap: Account;
   kapat: () => void; duzenle: () => void; incele: () => void;
 }) {
+  // Hesap detayında açık paneller — defterin widget ayarından bağımsız
+  const aktif = db.widgetlerHesap?.[hesap.id] ?? HESAP_WIDGETLAR.map((w) => w.kod);
+  const widgetDegistir = (kod: string) =>
+    setDb((d) => {
+      const suanki = d.widgetlerHesap?.[hesap.id] ?? HESAP_WIDGETLAR.map((w) => w.kod);
+      const yeni = suanki.includes(kod) ? suanki.filter((x) => x !== kod) : [...suanki, kod];
+      return { ...d, widgetlerHesap: { ...(d.widgetlerHesap || {}), [hesap.id]: yeni } };
+    });
   const [kontrolTarih, setKontrolTarih] = useState(hesap.sonKontrolTarih || "");
   const [kontrolBakiye, setKontrolBakiye] = useState(
     hesap.sonKontrolBakiye != null ? String(hesap.sonKontrolBakiye).replace(".", ",") : ""
@@ -1331,6 +1347,35 @@ function HesapYonetim({ db, setDb, hesap, kapat, duzenle, incele }: {
         </div>
       </div>
 
+      {/* EKRANDA GÖSTERİLECEK BÖLÜMLER */}
+      <div className="mb-4 rounded-xl border border-slate-200 p-3">
+        <div className="mb-2 text-xs font-semibold text-slate-600">Ekranda gösterilecek bölümler</div>
+        <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+          {HESAP_WIDGETLAR.map((w) => {
+            const acikMi = aktif.includes(w.kod);
+            return (
+              <button
+                key={w.kod}
+                onClick={() => widgetDegistir(w.kod)}
+                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] transition hover:bg-slate-50"
+              >
+                <span
+                  className={`grid h-[16px] w-[16px] shrink-0 place-items-center rounded border text-[10px] ${
+                    acikMi ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-transparent"
+                  }`}
+                >
+                  ✓
+                </span>
+                <span className={acikMi ? "text-slate-800" : "text-slate-400"}>{w.ad}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-1.5 text-[10.5px] leading-relaxed text-slate-400">
+          Seçimin bu hesaba özel kaydedilir.
+        </p>
+      </div>
+
       {/* EYLEMLER */}
       <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
         <Btn kucuk onClick={() => { kapat(); incele(); }}>Hareketleri gör</Btn>
@@ -1346,6 +1391,9 @@ function HesapDetay({ db, setDb, hesap, islemAc, txDuzenle, kapat, yonetHesapAc 
   islemAc: (id: string) => void; txDuzenle: (t: Tx) => void; kapat: () => void;
   yonetHesapAc: (id: string) => void;
 }) {
+  // Bu hesapta açık paneller (hesap ⋮ menüsünden yönetilir)
+  const hWidgetler = db.widgetlerHesap?.[hesap.id] ?? HESAP_WIDGETLAR.map((w) => w.kod);
+  const wAcik = (kod: string) => hWidgetler.includes(kod);
   const [odeForm, setOdeForm] = useState(false);
   const [odeTutar, setOdeTutar] = useState("");
   const [odeHesap, setOdeHesap] = useState("");
@@ -1481,14 +1529,16 @@ function HesapDetay({ db, setDb, hesap, islemAc, txDuzenle, kapat, yonetHesapAc 
           <Btn kucuk onClick={() => islemAc(hesap.id)}>+ İşlem Ekle</Btn>
         </div>
       </div>
+      {wAcik("ozet") && (
       <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Card><div className="text-xs text-slate-500">Güncel Bakiye</div><div className={`text-[26px] font-bold ${x >= 0 ? "text-slate-900" : "text-red-600"}`}>{para(x)}</div></Card>
         <Card><div className="flex items-center gap-1.5 text-xs text-slate-500"><span className="text-green-600">↗</span> Gelen</div><div className="text-[22px] font-bold">{para(gir)}</div></Card>
         <Card><div className="flex items-center gap-1.5 text-xs text-slate-500"><span className="text-red-600">↘</span> Giden</div><div className="text-[22px] font-bold">{para(cik)}</div></Card>
       </div>
+    )}
 
       {/* Kredi kartı: ekstre kesimine göre dönem borcu */}
-      {kart && (
+      {kart && wAcik("donem") && (
         <Card className="mb-3">
           <Baslik sag={<span className="text-xs text-slate-400">Son ödeme: <b className="text-slate-700">{trh(donem.sonOdeme)}</b></span>}>
             Dönem Borcu (Ekstre {trh(donem.bitis)}'de kesildi)
@@ -1536,6 +1586,7 @@ function HesapDetay({ db, setDb, hesap, islemAc, txDuzenle, kapat, yonetHesapAc 
       )}
 
       {/* Kontrol & mutabakat artık hesap kartındaki ⋮ menüsünden yönetilir. */}
+      {wAcik("bilgi") && (
       <Card className="mb-3">
         <Baslik sag={<Btn kucuk ghost onClick={() => yonetHesapAc(hesap.id)}>⋮ Kontrol & Mutabakat</Btn>}>
           Hesap Bilgileri
@@ -1549,6 +1600,7 @@ function HesapDetay({ db, setDb, hesap, islemAc, txDuzenle, kapat, yonetHesapAc 
           {hesap.mutabakatTarih ? <span>Son mutabakat: <b>{trh(hesap.mutabakatTarih)}</b></span> : null}
         </div>
       </Card>
+      )}
       {hesap.type === "credit_card" && hesap.limit ? (
         <div className="mb-3 flex flex-wrap items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4">
           <PilGosterge
@@ -1569,6 +1621,8 @@ function HesapDetay({ db, setDb, hesap, islemAc, txDuzenle, kapat, yonetHesapAc 
           <Card><div className="text-xs text-slate-500">Kullanılabilir</div><div className="text-lg font-bold text-green-600">{hesap.limit ? para(hesap.limit - borc) : "—"}</div></Card>
         </div>
       )}
+      {wAcik("hareket") && (
+        <>
       <div className="no-print mb-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
         <div className="min-w-[180px] flex-1">
           <input className={inp} value={dAra} onChange={(e) => setDAra(e.target.value)} placeholder="Açıklama veya kategori ara..." />
@@ -1637,6 +1691,8 @@ function HesapDetay({ db, setDb, hesap, islemAc, txDuzenle, kapat, yonetHesapAc 
           </div>
         </div>
       ))}
+        </>
+      )}
     </div>
   );
 }

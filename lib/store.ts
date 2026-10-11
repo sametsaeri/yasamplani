@@ -156,6 +156,8 @@ export type Db = {
    *  menüsünden gösterilip gizlenir. Anahtar: defter id, değer: widget kodları.
    *  Eski kayıtlarda yoksa tümü açık gelir (kullanıcı kendi düzenine göre kapatır). */
   widgetler?: Record<string, string[]>;
+  /** Hesap detayında açık paneller. Anahtar: hesap id. Hesap ⋮ menüsünden yönetilir. */
+  widgetlerHesap?: Record<string, string[]>;
   kiloHedef: { hedef: number; boy: number; tarih: string };
   ayarlar: Ayarlar;
 };
