@@ -1,0 +1,32 @@
+// Veritabanı şeması — kullanıcı bazlı veri saklama.
+// Her kullanıcı tek bir "data" JSON sütunu tutar (Db yapısının aynısı).
+// Bu sayede frontend değişim minimal olur; masaüstü/web aynı şemayı kullanır.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  name               String
+  passwordHash       String
+  securityQuestion   String    @default("")
+  securityAnswerHash String    @default("")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  data               UserData?
+}
+
+model UserData {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  data      Json
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt
+}

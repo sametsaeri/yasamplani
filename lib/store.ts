@@ -358,7 +358,7 @@ export function useDb(anahtar: string = KEY) {
 
   // D2: localStorage boş/bozuksa dosya veritabanından otomatik geri yükleme
   useEffect(() => {
-    if (typeof window === "undefined" || !window.elektron) return;
+    if (typeof window === "undefined") return;
     let gecerli = false;
     try {
       const raw = localStorage.getItem(anahtar);
@@ -368,12 +368,35 @@ export function useDb(anahtar: string = KEY) {
       gecerli = false;
     }
     if (gecerli) return;
-    window.elektron
-      .veriOku()
-      .then((s) => {
-        if (!s) return;
-        const d = JSON.parse(s);
+    // 1) Masaüstü (Electron) dosya veritabanı
+    if (window.elektron) {
+      window.elektron
+        .veriOku()
+        .then((s) => {
+          if (!s) return;
+          const d = JSON.parse(s);
+          if (d && Array.isArray(d.ledgers) && d.ledgers.length > 0) setDbState(tazele(d));
+        })
+        .catch(() => {});
+      return;
+    }
+    // 2) Web: ilk açılışta masaüstü yedeği otomatik içe aktar (telefon/PC'de
+    //    veri boşsa /masaustu-veri.json'dan doldurulur — veri kaybı olmaz).
+    //    Aynı anda parola da geçici "123456" olarak sıfırlanır (kullanıcı
+    //    parolasını unutmuş olabilir; güvenlik sorusuyla sonra değiştirebilir).
+    fetch("/masaustu-veri.json")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
         if (d && Array.isArray(d.ledgers) && d.ledgers.length > 0) setDbState(tazele(d));
+        try {
+          const eposta = anahtar.replace(/^hp-next-v1:/, "");
+          const users = JSON.parse(localStorage.getItem("hp-users") || "[]");
+          const u = Array.isArray(users) ? users.find((x: any) => x.eposta === eposta) : null;
+          if (u) {
+            u.parola = "5cdbb46538576e0534c6076d1de3c306d2f909498187269df66984e3b00d4e50";
+            localStorage.setItem("hp-users", JSON.stringify(users));
+          }
+        } catch { /* yok say */ }
       })
       .catch(() => {});
   }, [anahtar]);

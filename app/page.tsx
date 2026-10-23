@@ -602,6 +602,18 @@ export default function Home() {
     // Oturum varsa doğrudan gir; yoksa kayıtlı parolayla otomatik giriş dene
     // ("Beni hatırla"). Başarısızsa giriş ekranı (hatırlanan değerlerle) açılır.
     void (async () => {
+      // Yeni cihazda (telefon) hesap yoksa masaüstü kullanıcı listesini otomatik
+      // içe aktar → sametsarimuhasebe@gmail.com ile giriş yapılabilir (parola 123456).
+      try {
+        const mevcut = JSON.parse(localStorage.getItem("hp-users") || "[]");
+        if (!Array.isArray(mevcut) || mevcut.length === 0) {
+          const r = await fetch("/masaustu-kullanicilar.json");
+          if (r.ok) {
+            const u = await r.json();
+            if (Array.isArray(u) && u.length > 0) localStorage.setItem("hp-users", JSON.stringify(u));
+          }
+        }
+      } catch { /* sessiz */ }
       await kullanicilariYukle();
       if (!oturum()) {
         try { await otomatikGiris(); } catch { /* sessiz: giriş ekranı açılır */ }

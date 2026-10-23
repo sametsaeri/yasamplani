@@ -11,6 +11,8 @@ export type Kullanici = {
   olusturma: string;
 };
 
+import { sha256 as sha256Yedek } from "./sha256";
+
 const KULLANICILAR = "hp-users";
 const OTURUM = "hp-session";
 const TUZ = "hesap-planim-v1::";
@@ -18,10 +20,9 @@ const TUZ = "hesap-planim-v1::";
 let onbellek: Kullanici[] | null = null;
 
 async function sha256(metin: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(TUZ + metin));
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  // Güvenli olmayan bağlamlarda (http://LAN-IP) crypto.subtle kapalıdır;
+  // saf-JS yedeği aynı digest'i üretir → mevcut hesaplar çalışmaya devam eder.
+  return await sha256Yedek(metin, TUZ);
 }
 
 export function epostaGecerli(e: string): boolean {
