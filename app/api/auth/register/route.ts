@@ -26,7 +26,8 @@ export async function POST(req: NextRequest) {
     const res = NextResponse.json({ ok: true, email: user.email, ad: user.name, token });
     res.cookies.set(cookieAyarla(token));
     return res;
-  } catch (e) {
-    return NextResponse.json({ hata: "Sunucu hatası." }, { status: 500 });
+  } catch (e: any) {
+    console.error("REGISTER ERROR:", e);
+    return NextResponse.json({ hata: e?.message || "Sunucu hatası." }, { status: 500 });
   }
 }

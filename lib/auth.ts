@@ -63,7 +63,7 @@ async function hazir(): Promise<Kullanici[]> {
   return oku();
 }
 
-const norm = (e: string) => e.trim().toLocaleLowerCase("tr");
+const norm = (e: string) => e.trim().toLowerCase();
 
 /** Hata metni döndürür; null = başarılı. */
 export async function kayitOl(ad: string, eposta: string, parola: string, soru: string, cevap: string): Promise<string | null> {
