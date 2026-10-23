@@ -5,6 +5,17 @@ import { dogrulaParola, tokenUret, cookieAyarla } from "@/lib/auth-server";
 export async function POST(req: NextRequest) {
   try {
     const { eposta, parola } = await req.json();
+    
+    // Debug: env check
+    if (!process.env.DATABASE_URL) {
+      console.error("LOGIN ERROR: DATABASE_URL missing");
+      return NextResponse.json({ hata: "Sunucu yapılandırması eksik: DATABASE_URL", debug: "env" }, { status: 500 });
+    }
+    if (!process.env.JWT_SECRET) {
+      console.error("LOGIN ERROR: JWT_SECRET missing");
+      return NextResponse.json({ hata: "Sunucu yapılandırması eksik: JWT_SECRET", debug: "env" }, { status: 500 });
+    }
+
     const user = await prisma.user.findUnique({ where: { email: eposta } });
     if (!user) return NextResponse.json({ hata: "Bu e-posta kayıtlı değil." }, { status: 404 });
     const ok = await dogrulaParola(parola, user.passwordHash);
@@ -15,7 +26,7 @@ export async function POST(req: NextRequest) {
     res.cookies.set(cookieAyarla(token));
     return res;
   } catch (e: any) {
-    console.error("LOGIN ERROR:", e);
-    return NextResponse.json({ hata: e?.message || "Sunucu hatası." }, { status: 500 });
+    console.error("LOGIN ERROR:", e?.message, e?.stack, e?.code);
+    return NextResponse.json({ hata: e?.message || "Sunucu hatası.", debug: "catch" }, { status: 500 });
   }
 }
