@@ -3,11 +3,16 @@
 
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { cookies, headers } from "next/headers";
+import { cookies, headers } from "next/";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me-in-prod";
 const COOKIE = "hp_token";
 const MAX_AGE = 60 * 60 * 24 * 30; // 30 gün
+
+// Google OAuth config
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
+const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || "";
 
 export type JwtPayload = { userId: string; email: string };
 
@@ -73,4 +78,46 @@ export function cookieSil() {
     path: "/",
     maxAge: 0,
   };
+}
+
+// Google OAuth: Authorization URL'i oluştur
+export function googleAuthUrl(): string {
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: GOOGLE_CALLBACK_URL,
+    response_type: "code",
+    scope: "profile email",
+    access_type: "offline",
+    prompt: "select_account",
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+}
+
+// Google OAuth: Token al ve kullanıcı bilgilerini döndür
+export async function googleTokenAl(code: string): Promise<{ email: string; name: string } | null> {
+  try {
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: GOOGLE_CALLBACK_URL,
+        grant_type: "authorization_code",
+      }),
+    });
+
+    const tokenData = await tokenRes.json();
+    if (!tokenData.access_token) return null;
+
+    const userRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+
+    const userData = await userRes.json();
+    return { email: userData.email, name: userData.name };
+  } catch {
+    return null;
+  }
 }
