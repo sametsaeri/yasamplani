@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     if (!ok) return NextResponse.json({ hata: "Parola hatalı." }, { status: 401 });
 
     const token = tokenUret({ userId: user.id, email: user.email });
-    const res = NextResponse.json({ ok: true, email: user.email, ad: user.name });
+    const res = NextResponse.json({ ok: true, email: user.email, ad: user.name, token });
     res.cookies.set(cookieAyarla(token));
     return res;
   } catch (e) {

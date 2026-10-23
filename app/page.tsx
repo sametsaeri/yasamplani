@@ -13,6 +13,7 @@ import { useDb } from "../lib/store";
 import { ayToplam, defterOzet } from "../lib/finance";
 import { buAy, bugun, para, trh } from "../lib/format";
 import { cikis, giris, kullaniciAd, kullanicilariYukle, otomatikGiris, oturum, veriAnahtari } from "../lib/auth";
+import { cloudMe, cloudGiris, apiTokenAl } from "../lib/api";
 import { otoYedekle } from "../lib/yedek";
 import { diskYedekYaz } from "../lib/elektron";
 import { Btn, Card, KullaniciPaneli, Stat, yakinlastirmaBaslat } from "../components/ui";
@@ -602,8 +603,18 @@ export default function Home() {
     // Oturum varsa doğrudan gir; yoksa kayıtlı parolayla otomatik giriş dene
     // ("Beni hatırla"). Başarısızsa giriş ekranı (hatırlanan değerlerle) açılır.
     void (async () => {
-      // Yeni cihazda (telefon) hesap yoksa masaüstü kullanıcı listesini otomatik
-      // içe aktar → sametsarimuhasebe@gmail.com ile giriş yapılabilir (parola 123456).
+      // 1) Bulut (Neon) oturumu var mı?
+      try {
+        const me = await cloudMe();
+        if (me?.email) { setEposta(me.email); setHazir(true); return; }
+        // hatırlanan parolayla otomatik giriş dene
+        const h = (window.localStorage.getItem("hp-hatirla") ? JSON.parse(window.localStorage.getItem("hp-hatirla")!) : null);
+        if (h?.eposta && h?.parola) {
+          const err = await cloudGiris(h.eposta, h.parola);
+          if (!err) { const m2 = await cloudMe(); if (m2?.email) { setEposta(m2.email); setHazir(true); return; } }
+        }
+      } catch { /* sessiz */ }
+      // 2) Yerel mod fallback (offline / env eksik)
       try {
         const mevcut = JSON.parse(localStorage.getItem("hp-users") || "[]");
         if (!Array.isArray(mevcut) || mevcut.length === 0) {
@@ -616,7 +627,7 @@ export default function Home() {
       } catch { /* sessiz */ }
       await kullanicilariYukle();
       if (!oturum()) {
-        try { await otomatikGiris(); } catch { /* sessiz: giriş ekranı açılır */ }
+        try { await otomatikGiris(); } catch { /* sessiz */ }
       }
       setEposta(oturum());
       setHazir(true);

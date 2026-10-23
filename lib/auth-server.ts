@@ -3,7 +3,7 @@
 
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me-in-prod";
 const COOKIE = "hp_token";
@@ -34,9 +34,17 @@ export function tokenCoz(token: string): JwtPayload | null {
 export async function oturumdanKullanici(): Promise<JwtPayload | null> {
   try {
     const c = await cookies();
-    const t = c.get(COOKIE)?.value;
-    if (!t) return null;
-    return tokenCoz(t);
+    const ct = c.get(COOKIE)?.value;
+    if (ct) {
+      const p = tokenCoz(ct);
+      if (p) return p;
+    }
+    // Masaüstü (file://) ve mobil için Bearer token desteği
+    const h = await headers();
+    const auth = h.get("authorization") || "";
+    const m = auth.match(/^Bearer\s+(.+)$/i);
+    if (m) return tokenCoz(m[1].trim());
+    return null;
   } catch {
     return null;
   }

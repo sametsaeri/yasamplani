@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { KeyRound, LogIn, UserPlus, Wallet } from "lucide-react";
 import { SORULAR, epostaGecerli, giris, hatirlanan, kayitOl, parolaHatirla, sifirla, sifirlamaSorusu } from "../lib/auth";
+import { cloudGiris, cloudKayit, cloudMe } from "../lib/api";
 import { inp } from "./ui";
 
 export default function AuthScreen({ onGiris }: { onGiris: (eposta: string) => void }) {
@@ -88,7 +89,9 @@ export default function AuthScreen({ onGiris }: { onGiris: (eposta: string) => v
                 e.preventDefault();
                 const ep = eposta.trim().toLocaleLowerCase("tr");
                 void calistir(async () => {
-                  const h = await giris(ep, parola);
+                  // Bulut (Neon) öncelikli; ağ/env hatasında yerel mod devreye girer
+                  let h = await cloudGiris(ep, parola);
+                  if (h) h = await giris(ep, parola);
                   if (!h && beniHatirla && parolaKaydet) parolaHatirla(ep, parola);
                   return h;
                 }, ep);
@@ -133,7 +136,11 @@ export default function AuthScreen({ onGiris }: { onGiris: (eposta: string) => v
           {mod === "kayit" && (
             <form
               className="space-y-3"
-              onSubmit={(e) => { e.preventDefault(); void calistir(() => kayitOl(ad, eposta, parola, soru, cevap), eposta.trim().toLocaleLowerCase("tr")); }}
+              onSubmit={(e) => { e.preventDefault(); void calistir(async () => {
+                const h = await cloudKayit(ad, eposta, parola, soru, cevap);
+                if (h) return (await kayitOl(ad, eposta, parola, soru, cevap));
+                return null;
+              }, eposta.trim().toLocaleLowerCase("tr")); }}
             >
               <label className="block text-xs text-slate-500">Ad Soyad<input className={inp} value={ad} onChange={(e) => setAd(e.target.value)} placeholder="Adın" autoComplete="name" /></label>
               <label className="block text-xs text-slate-500">E-posta<input className={inp} value={eposta} onChange={(e) => setEposta(e.target.value)} placeholder="ornek@eposta.com" autoComplete="email" /></label>

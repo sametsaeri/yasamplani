@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { cloudDataGetir, cloudDataKaydet } from "./api";
 
 export type Ledger = {
   id: string;
@@ -401,6 +402,30 @@ export function useDb(anahtar: string = KEY) {
       .catch(() => {});
   }, [anahtar]);
 
+  // Bulut (Neon) senkronizasyonu: ilk açılışta sunucudan veriyi çek; yoksa yerel
+  // veriyi sunucuya it (masaüstü→web taşıma). Ardından her kayıtta sunucuya yaz.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let iptal = false;
+    (async () => {
+      const sunucu = await cloudDataGetir();
+      if (iptal) return;
+      if (sunucu && Array.isArray(sunucu.ledgers) && sunucu.ledgers.length > 0) {
+        setDbState(tazele(sunucu));
+        return;
+      }
+      // sunucu boş → yerel veriyi sunucuya it (varsa)
+      try {
+        const raw = localStorage.getItem(anahtar);
+        const d = raw ? JSON.parse(raw) : null;
+        if (d && Array.isArray(d.ledgers) && d.ledgers.length > 0) {
+          await cloudDataKaydet(d);
+        }
+      } catch { /* sessiz */ }
+    })();
+    return () => { iptal = true; };
+  }, [anahtar]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     // Not: kayıt gecikmeli. Önceden her tuş vuruşunda iki kez JSON.stringify +
@@ -413,6 +438,8 @@ export function useDb(anahtar: string = KEY) {
       } catch {
         /* depolama dolu olabilir */
       }
+      // Bulut (Neon): her kayıtta sunucuya yaz (debounced, fire-and-forget)
+      cloudDataKaydet(db).catch(() => {});
       // D2: masaüstünde veri diske de yazılır (tarayıcı deposu silinse bile kaybolmaz)
       window.elektron?.veriYaz(s).catch(() => {});
       return s;
