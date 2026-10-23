@@ -18,34 +18,32 @@ function planOzet(liste: Plan[]) {
   return { toplam, biten, yuzde: toplam ? Math.round((biten / toplam) * 100) : 0 };
 }
 
-/** Tek plan satırı: ✓ tamamla (geri alınabilir) + sil */
+/** Tek plan satırı: ✓ tamamla + sil + düzenle */
 function PlanSatir({
-  p, tikla, sil, sinif = "border-b border-slate-100 py-2 text-sm"
-}: { p: Plan; tikla: () => void; sil: () => void; sinif?: string }) {
+  p, tikla, sil, duzenle, setDb, sinif = "border-b border-slate-100 py-2 text-sm"
+}: { p: Plan; tikla: () => void; sil: () => void; duzenle: () => void; setDb: (u: (d: Db) => Db) => void; sinif?: string }) {
+  const [edit, setEdit] = useState(false);
+  const [yeni, setYeni] = useState(p.text);
+  useEffect(() => { setYeni(p.text); }, [p.text]);
+  if (!edit) {
+    return (
+      <div className={`flex items-center gap-2 ${sinif}`}>
+        <button type="button" onClick={tikla} aria-pressed={!!p.done} aria-label={p.done ? "Tamamlandı işaretini kaldır" : "Tamamlandı olarak işaretle"} title={p.done ? "Tamamlandı — tıklayınca geri alınır" : "Tamamlandı olarak işaretle"} className={`grid h-[18px] w-[18px] shrink-0 place-items-center rounded-md border text-[11px] leading-none transition ${p.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white text-transparent hover:border-slate-900"}`}>✓</button>
+        <span className={`min-w-0 flex-1 ${p.done ? "text-slate-400 line-through" : ""}`}>
+          {p.saat ? <b>{p.saat}{p.bitis ? ` — ${p.bitis}` : ""} </b> : null}
+          {p.text}
+          {p.bitis && p.sureDakika != null && <span className="ml-1.5 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">{sureMetin(p.sureDakika)}</span>}
+        </span>
+        <button className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Düzenle" onClick={duzenle}>✎</button>
+        <SilBtn onClick={sil} />
+      </div>
+    );
+  }
   return (
-    <div className={`flex items-center gap-2 ${sinif}`}>
-      <button
-        type="button"
-        onClick={tikla}
-        aria-pressed={!!p.done}
-        aria-label={p.done ? "Tamamlandı işaretini kaldır" : "Tamamlandı olarak işaretle"}
-        title={p.done ? "Tamamlandı — tıklayınca geri alınır" : "Tamamlandı olarak işaretle"}
-        className={`grid h-[18px] w-[18px] shrink-0 place-items-center rounded-md border text-[11px] leading-none transition ${
-          p.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white text-transparent hover:border-slate-900"
-        }`}
-      >
-        ✓
-      </button>
-      <span className={`min-w-0 flex-1 ${p.done ? "text-slate-400 line-through" : ""}`}>
-        {p.saat ? <b>{p.saat}{p.bitis ? ` — ${p.bitis}` : ""} </b> : null}
-        {p.text}
-        {p.bitis && p.sureDakika != null && (
-          <span className="ml-1.5 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">
-            {sureMetin(p.sureDakika)}
-          </span>
-        )}
-      </span>
-      <SilBtn onClick={sil} />
+    <div className={`flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 ${sinif}`}>
+      <input type="text" value={yeni} onChange={(e) => setYeni(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { setEdit(false); setDb((d) => ({ ...d, plans: d.plans.map((x) => (x.id === p.id ? { ...x, text: yeni } : x)) })); } else if (e.key === "Escape") setEdit(false); }} className="flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm" />
+      <Btn kucuk ghost onClick={() => { setEdit(false); setYeni(p.text); }}>✕</Btn>
+      <Btn kucuk onClick={() => { setEdit(false); setDb((d) => ({ ...d, plans: d.plans.map((x) => (x.id === p.id ? { ...x, text: yeni } : x)) })); }}>✓</Btn>
     </div>
   );
 }
@@ -144,6 +142,8 @@ export function ZamanView({ db, setDb }: Props) {
   const [saat, setSaat] = useState("");
   /** Bitiş saati (saat aralığı) */
   const [bitisSaat, setBitisSaat] = useState("");
+  const [planSablonAd, setPlanSablonAd] = useState("");
+  const [planSablonSec, setPlanSablonSec] = useState("");
 
   const pad = (n: number) => String(n).padStart(2, "0");
   const isoYerel = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -171,6 +171,27 @@ export function ZamanView({ db, setDb }: Props) {
   };
 
   const silPlan = (id: string) => setDb((d) => ({ ...d, plans: d.plans.filter((x) => x.id !== id) }));
+  const planSablonKaydet = () => {
+    const ad = planSablonAd.trim();
+    if (!ad) return;
+    const planlar = gunPlan.filter((p) => p.saat).map((p) => ({ text: p.text, saat: p.saat, bitis: p.bitis, sureDakika: p.sureDakika }));
+    if (planlar.length === 0) return alert("Bu gün için plan yok.");
+    setDb((d) => ({ ...d, planSablonlari: [...d.planSablonlari, { id: uid(), ad, planlar }] }));
+    setPlanSablonAd("");
+  };
+  const planSablonUygula = (id: string, hedefTarih: string) => {
+    const s = db.planSablonlari.find((x) => x.id === id);
+    if (!s) return;
+    setDb((d) => ({
+      ...d,
+      plans: [...d.plans, ...s.planlar.map((p) => ({ id: uid(), date: hedefTarih, text: p.text, saat: p.saat, bitis: p.bitis, sureDakika: p.sureDakika }))]
+    }));
+    setPlanSablonSec("");
+  };
+  const planSablonSil = (id: string) => {
+    if (!confirm("Plan şablonu silinsin mi?")) return;
+    setDb((d) => ({ ...d, planSablonlari: d.planSablonlari.filter((x) => x.id !== id) }));
+  };
   /** Planı tamamlandı / tamamlanmadı yapar (tek tuş, geri alınabilir) */
   const planTikla = (id: string) =>
     setDb((d) => ({ ...d, plans: d.plans.map((x) => (x.id === id ? { ...x, done: !x.done } : x)) }));
@@ -354,8 +375,35 @@ export function ZamanView({ db, setDb }: Props) {
         </div>
         <div className="mt-2">
           {gunPlan.length === 0 ? <Bos yazi="Bu gün plan yok." /> : gunPlan.map((p) => (
-            <PlanSatir key={p.id} p={p} tikla={() => planTikla(p.id)} sil={() => silPlan(p.id)} />
+            <PlanSatir key={p.id} p={p} tikla={() => planTikla(p.id)} sil={() => silPlan(p.id)} duzenle={() => { setMetin(p.text); setSaat(p.saat); setBitisSaat(p.bitis || ""); }} setDb={setDb} />
           ))}
+        </div>
+        {/* PLAN ŞABLONLARI */}
+        <div className="mt-3 border-t border-slate-100 pt-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500">Plan Şablonları</span>
+            <Btn kucuk ghost onClick={() => planSablonKaydet()}>Bu Günü Şablon Kaydet</Btn>
+          </div>
+          <input
+            className="mb-2 w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm outline-none text-slate-900 placeholder:text-slate-400"
+            placeholder="Şablon adı (örn: Günlük Rutin, Çalışma Günü...)"
+            value={planSablonAd}
+            onChange={(e) => setPlanSablonAd(e.target.value)}
+          />
+          {db.planSablonlari.length > 0 && (
+            <div className="space-y-1">
+              {db.planSablonlari.map((s) => (
+                <div key={s.id} className="flex items-center gap-2 rounded-lg border border-slate-100 px-2 py-1.5 text-sm">
+                  <span className="min-w-0 flex-1 font-medium">{s.ad} <span className="text-xs text-slate-400">({s.planlar.length} plan)</span></span>
+                  <div className="flex items-center gap-1">
+                    <input type="date" className="w-[130px] rounded border border-slate-200 px-1 py-0.5 text-xs" ref={(el) => { if (el) el.value = bugun().slice(0, 10); }} onChange={(e) => { (e.target as HTMLInputElement).dataset.id = s.id; }} />
+                    <Btn kucuk onClick={(e) => { const inp = (e.target as HTMLButtonElement).previousElementSibling as HTMLInputElement; if (inp?.value) planSablonUygula(inp.dataset.id || "", inp.value); }}>Ekle</Btn>
+                  </div>
+                  <button className="shrink-0 rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500" title="Sil" onClick={() => planSablonSil(s.id)}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </Card>
       </div>
@@ -378,7 +426,7 @@ export function ZamanView({ db, setDb }: Props) {
               <span className="text-[11px] text-slate-500">{planOzet(gunBoyu).biten}/{planOzet(gunBoyu).toplam} ✓</span>
             </div>
             {gunBoyu.length === 0 ? <div className="text-xs text-slate-400">Yok.</div> : gunBoyu.map((p) => (
-              <PlanSatir key={p.id} p={p} sinif="py-1.5 text-[13px]" tikla={() => planTikla(p.id)} sil={() => silPlan(p.id)} />
+              <PlanSatir key={p.id} p={p} sinif="py-1.5 text-[13px]" tikla={() => planTikla(p.id)} sil={() => silPlan(p.id)} duzenle={() => { setMetin(p.text); setSaat(p.saat); setBitisSaat(p.bitis || ""); }} setDb={setDb} />
             ))}
           </div>
         </Card>
@@ -392,7 +440,7 @@ export function ZamanView({ db, setDb }: Props) {
               <span className="w-12 shrink-0 pt-1 font-semibold text-slate-500">{h}:00</span>
               <div className="flex-1 space-y-1">
                 {saatlik[h].length === 0 ? <span className="text-xs text-slate-300">—</span> : saatlik[h].map((p) => (
-                  <PlanSatir key={p.id} p={p} sinif="rounded-lg bg-slate-50 px-2 py-1 text-[13px]" tikla={() => planTikla(p.id)} sil={() => silPlan(p.id)} />
+                  <PlanSatir key={p.id} p={p} sinif="rounded-lg bg-slate-50 px-2 py-1 text-[13px]" tikla={() => planTikla(p.id)} sil={() => silPlan(p.id)} duzenle={() => { setMetin(p.text); setSaat(p.saat); setBitisSaat(p.bitis || ""); }} setDb={setDb} />
                 ))}
               </div>
               <button className="shrink-0 pt-1 text-xs text-blue-600 hover:underline" onClick={() => setSaat(h + ":00")}>+ Ekle</button>
@@ -600,6 +648,14 @@ export function GorevView({ db, setDb }: Props) {
   const [aktifListe, setAktifListe] = useState<string>(VARSAYILAN_LISTE);
   const [yeniListe, setYeniListe] = useState("");
   const [listeForm, setListeForm] = useState(false);
+  const [sablonSec, setSablonSec] = useState("");
+  const [sablonForm, setSablonForm] = useState(false);
+  const [sablonAd, setSablonAd] = useState("");
+  const [duzenId, setDuzenId] = useState<string | null>(null);
+  const [duzenMetin, setDuzenMetin] = useState("");
+  const [duzenBaslangic, setDuzenBaslangic] = useState("");
+  const [duzenBitis, setDuzenBitis] = useState("");
+  const [duzenSaat, setDuzenSaat] = useState("");
 
   const listeAd = (t: Task) => (t.liste || "").trim() || VARSAYILAN_LISTE;
   const listeler = useMemo(() => {
@@ -669,6 +725,87 @@ export function GorevView({ db, setDb }: Props) {
     setTarih("");
     setBaslangic("");
     setBitis("");
+  };
+
+  const sablonEkle = () => {
+    const ad = sablonAd.trim();
+    if (!ad) return;
+    setDb((d) => ({ ...d, gorevSablonlari: [...d.gorevSablonlari, { id: uid(), text: ad, prio: oncelik, tarih: tarih || undefined, baslangic: baslangic || undefined, bitis: bitis || undefined, liste: aktifListe === VARSAYILAN_LISTE ? undefined : aktifListe }] }));
+    setSablonAd("");
+    setSablonForm(false);
+  };
+
+  const sablonKullan = (id: string, tarih?: string) => {
+    const s = db.gorevSablonlari.find((x) => x.id === id);
+    if (!s) return;
+    // Görev olarak ekle
+    setMetin(s.text);
+    setOncelik(s.prio);
+    if (s.tarih) setTarih(s.tarih);
+    if (s.baslangic) setBaslangic(s.baslangic);
+    if (s.bitis) setBitis(s.bitis);
+    if (s.liste) setAktifListe(s.liste);
+    // Planlama olarak ekle (tarih + saat + açıklama)
+    if (s.baslangic) {
+      const hedefTarih = tarih || bugun();
+      setDb((d) => ({
+        ...d,
+        plans: [...d.plans, {
+          id: uid(),
+          date: hedefTarih,
+          text: s.text,
+          saat: s.baslangic || "09:00",
+          bitis: s.bitis || undefined,
+          sureDakika: s.sureDakika
+        }]
+      }));
+    }
+    setSablonSec("");
+  };
+
+  const sablonSil = (id: string) => {
+    if (!confirm("Şablon silinsin mi?")) return;
+    setDb((d) => ({ ...d, gorevSablonlari: d.gorevSablonlari.filter((x) => x.id !== id) }));
+  };
+
+  const sablonDuzenle = (id: string) => {
+    const s = db.gorevSablonlari.find((x) => x.id === id);
+    if (!s) return;
+    setDuzenId(id);
+    setDuzenMetin(s.text);
+    setDuzenBaslangic(s.baslangic || "");
+    setDuzenBitis(s.bitis || "");
+    setDuzenSaat(s.sureDakika != null ? String(s.sureDakika) : "");
+  };
+
+  const sablonGuncelle = () => {
+    if (!duzenId || !duzenMetin.trim()) return;
+    setDb((d) => ({ ...d, gorevSablonlari: d.gorevSablonlari.map((x) => (x.id === duzenId ? { ...x, text: duzenMetin.trim(), baslangic: duzenBaslangic || undefined, bitis: duzenBitis || undefined, sureDakika: duzenSaat ? parseInt(duzenSaat, 10) || undefined : undefined } : x)) }));
+    setDuzenId(null);
+    setDuzenMetin("");
+    setDuzenBaslangic("");
+    setDuzenBitis("");
+    setDuzenSaat("");
+  };
+
+  const gorevDuzenle = (t: Task) => {
+    setMetin(t.text);
+    setOncelik(t.prio);
+    setTarih(t.tarih || "");
+    setBaslangic(t.baslangic || "");
+    setBitis(t.bitis || "");
+    if (t.liste) setAktifListe(t.liste);
+    setAcik(t.id);
+  };
+
+  const gorevGuncelle = () => {
+    if (!acik || !metin.trim()) return;
+    guncelle(acik, { text: metin.trim(), prio: oncelik, tarih: tarih || undefined, baslangic: baslangic || undefined, bitis: bitis || undefined, liste: aktifListe === VARSAYILAN_LISTE ? undefined : aktifListe });
+    setMetin("");
+    setTarih("");
+    setBaslangic("");
+    setBitis("");
+    setAcik(null);
   };
 
   let liste = [...db.tasks]
@@ -756,10 +893,54 @@ export function GorevView({ db, setDb }: Props) {
           📂 <b>{aktifListe}</b> listesine ait görevler — bitenler/bekleyenler sayacı her listenin başında.
         </p>
       )}
+      {/* ŞABLONLAR */}
+      <div className="mb-3">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-xs font-semibold text-slate-500">Şablonlar</span>
+          <Btn kucuk ghost onClick={() => setSablonForm(!sablonForm)}>+ Yeni Şablon</Btn>
+        </div>
+        <div className="space-y-1">
+          {db.gorevSablonlari.map((s) => (
+            <div key={s.id} className="flex items-center gap-2 rounded-lg border border-slate-100 px-2 py-1.5 text-sm">
+              <button className="min-w-0 flex-1 text-left" onClick={() => sablonKullan(s.id)}>
+                <span className="font-medium">{s.text}</span>
+                {s.baslangic && <span className="ml-2 text-xs text-slate-400">{s.baslangic}{s.bitis ? `—${s.bitis}` : ""}</span>}
+                {s.sureDakika != null && <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">{sureMetin(s.sureDakika)}</span>}
+              </button>
+              <button className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Düzenle" onClick={() => sablonDuzenle(s.id)}>✎</button>
+              <button className="shrink-0 rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500" title="Sil" onClick={() => sablonSil(s.id)}>✕</button>
+            </div>
+          ))}
+        </div>
+        {sablonForm && (
+          <div className="mt-2 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <input className={inp} value={sablonAd} onChange={(e) => setSablonAd(e.target.value)} placeholder="Şablon adı (örn: 04:00—04:10 UYANMA SAATİ)" />
+            <div className="grid grid-cols-2 gap-2">
+              <input type="time" className={inp} value={baslangic} onChange={(e) => setBaslangic(e.target.value)} />
+              <input type="time" className={inp} value={bitis} onChange={(e) => setBitis(e.target.value)} />
+            </div>
+            <Btn kucuk onClick={sablonEkle}>Kaydet</Btn>
+            <Btn kucuk ghost onClick={() => setSablonForm(false)}>İptal</Btn>
+          </div>
+        )}
+        {duzenId && (
+          <div className="mt-2 space-y-2 rounded-xl border border-indigo-200 bg-indigo-50 p-3">
+            <input className={inp} value={duzenMetin} onChange={(e) => setDuzenMetin(e.target.value)} placeholder="Şablon içeriği" />
+            <div className="grid grid-cols-3 gap-2">
+              <input type="time" className={inp} value={duzenBaslangic} onChange={(e) => setDuzenBaslangic(e.target.value)} />
+              <input type="time" className={inp} value={duzenBitis} onChange={(e) => setDuzenBitis(e.target.value)} />
+              <input className={inp} value={duzenSaat} onChange={(e) => setDuzenSaat(e.target.value)} placeholder="Süre (dk)" />
+            </div>
+            <Btn kucuk onClick={sablonGuncelle}>Güncelle</Btn>
+            <Btn kucuk ghost onClick={() => { setDuzenId(null); setDuzenMetin(""); }}>İptal</Btn>
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_150px_150px_auto]">
         <Alan etiket="Yeni görev">
           <input className={inp} value={metin} onChange={(e) => setMetin(e.target.value)} placeholder="örn: Faturaları öde"
-            onKeyDown={(e) => { if (e.key === "Enter") ekle(); }} />
+            onKeyDown={(e) => { if (e.key === "Enter") { if (acik) gorevGuncelle(); else ekle(); } }} />
         </Alan>
         <Alan etiket="Tarih (takvim)">
           <input type="date" className={inp} value={tarih} onChange={(e) => setTarih(e.target.value)} />
@@ -839,6 +1020,7 @@ export function GorevView({ db, setDb }: Props) {
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${durumRengi[t.durum || "bekliyor"]}`}>
               {t.durum === "devam" ? "Devam" : t.durum === "tamam" ? "Tamam" : "Bekliyor"}
             </span>
+            <button className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Düzenle" onClick={() => gorevDuzenle(t)}>✎</button>
             <SilBtn onClick={() => setDb((d) => ({ ...d, tasks: d.tasks.filter((x) => x.id !== t.id) }))} />
           </div>
           {acik === t.id ? (

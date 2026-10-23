@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useState } from "react";
+import React, { useEffect, useRef, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Db } from "../lib/store";
 import type { View } from "./Sidebar";
@@ -82,16 +82,25 @@ export function ParaGirisi({ value, onChange, className = "", placeholder = "0,0
   className?: string;
   placeholder?: string;
 }) {
+  const sonBicim = useRef<string>(value);
+  useEffect(() => { sonBicim.current = value; }, [value]);
+
   return (
     <input
       className={`${inp} tabular-nums ${className}`}
       inputMode="decimal"
       value={value}
       placeholder={placeholder}
-      onChange={(e) => onChange(paraGirCanli(e.target.value), parayaCevir(e.target.value))}
+      onChange={(e) => {
+        const yeni = paraGirCanli(e.target.value, sonBicim.current);
+        sonBicim.current = yeni;
+        onChange(yeni, parayaCevir(yeni));
+      }}
       onBlur={(e) => {
-        if (!e.target.value) return onChange("", 0);
-        onChange(paraGir(parayaCevir(e.target.value)), parayaCevir(e.target.value));
+        if (!e.target.value) { sonBicim.current = ""; return onChange("", 0); }
+        const b = paraGir(parayaCevir(e.target.value));
+        sonBicim.current = b;
+        onChange(b, parayaCevir(b));
       }}
     />
   );

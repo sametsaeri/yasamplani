@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Sidebar, { type View } from "../components/Sidebar";
 import KomutPaleti from "../components/KomutPaleti";
-import Finans from "../components/Finans";
+import Finans, { ButceView } from "../components/Finans";
 import { GorevView, GunlukView, KiloView, NotView, ZamanView } from "../components/Yasam";
 import { AsistanView, RaporView } from "../components/Rapor";
 import { YardimView } from "../components/Yardim";
@@ -12,7 +12,7 @@ import type { Db } from "../lib/store";
 import { useDb } from "../lib/store";
 import { ayToplam, defterOzet } from "../lib/finance";
 import { buAy, bugun, para, trh } from "../lib/format";
-import { cikis, giris, kullaniciAd, kullanicilariYukle, oturum, veriAnahtari } from "../lib/auth";
+import { cikis, giris, kullaniciAd, kullanicilariYukle, otomatikGiris, oturum, veriAnahtari } from "../lib/auth";
 import { otoYedekle } from "../lib/yedek";
 import { diskYedekYaz } from "../lib/elektron";
 import { Btn, Card, KullaniciPaneli, Stat, yakinlastirmaBaslat } from "../components/ui";
@@ -23,6 +23,7 @@ const BASLIK: Record<View, [string, string]> = {
   zaman: ["Zaman Planlama", "Takvimin ve zamanlanmış planların."],
   gorev: ["Görevler", "Listelerini ve görevlerini yönet."],
   finans: ["Finansal Yönetim", "Defterler, hesaplar, çek/fatura ve ödemeler."],
+  butce: ["Bütçe Dağılımı", "Aylık bütçeler, kategoriye göre dağılım ve harcama takibi."],
   kilo: ["Kilo & Beslenme", "Kilo takibi ve günlük beslenme kaydı."],
   gunluk: ["Günlüğüm", "Kişisel günlük kayıtların."],
   not: ["Notlar", "İşlerini ve fikirlerini takip et."],
@@ -32,60 +33,122 @@ const BASLIK: Record<View, [string, string]> = {
 };
 
 function Panel({ db, go, setDb }: { db: Db; go: (v: View) => void; setDb: (u: (d: Db) => Db) => void }) {
-  const hesaplar = db.accounts.filter((h) => h.ledger_id === db.aktif && !h.paneldeGizle);
-  const txs = db.transactions.filter((t) => t.ledger_id === db.aktif);
-  const oz = defterOzet(hesaplar, db.transactions);
+  // Not: Panel her veri değişikliğinde yeniden çizilir; hesaplamalar useMemo ile
+  // önbelleğe alınmıştır. setDb artık sığ kopya yaptığı için değişmeyen alanların
+  // referansı korunur ve bu önbellekler veri değişmeden çalışmaz.
+  const hesaplar = useMemo(() => db.accounts.filter((h) => h.ledger_id === db.aktif && !h.paneldeGizle), [db.accounts, db.aktif]);
+  const txs = useMemo(() => db.transactions.filter((t) => t.ledger_id === db.aktif), [db.transactions, db.aktif]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const oz = useMemo(() => defterOzet(hesaplar, db.transactions), [hesaplar, db.transactions]);
   const ay = buAy();
-  const { gelir, gider, tasarruf } = ayToplam(txs, ay);
-  const son = [...txs].sort((a, c) => (a.date < c.date ? -1 : 1)).slice(0, 8);
+  const { gelir, gider, tasarruf } = useMemo(() => ayToplam(txs, ay), [txs, ay]);
+  const son = useMemo(() => [...txs].sort((a, c) => (a.date < c.date ? -1 : 1)).slice(0, 8), [txs]);
   const lim = new Date();
   lim.setDate(lim.getDate() + 7);
   const limS = `${lim.getFullYear()}-${String(lim.getMonth() + 1).padStart(2, "0")}-${String(lim.getDate()).padStart(2, "0")}`;
-  const yak = db.plans.filter((p) => p.date >= bugun() && p.date <= limS).sort((a, c) => (a.date < c.date ? -1 : 1)).slice(0, 6);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const yak = useMemo(() => db.plans.filter((p) => p.date >= bugun() && p.date <= limS).sort((a, c) => (a.date < c.date ? -1 : 1)).slice(0, 6), [db.plans, limS]);
   const gorevler = db.tasks.filter((t) => !t.done).slice(0, 5);
-  const odemeler = yaklasanOdemeler(db, 14);
-  const butceler = db.budgets.filter((b) => b.ledger_id === db.aktif && b.month === ay);
-  let bTop = 0;
-  let bHar = 0;
-  butceler.forEach((b) => {
-    bTop += b.limit;
-    let h = 0;
-    txs.forEach((t) => {
-      if (t.type === "expense" && t.date.slice(0, 7) === b.month && t.category === b.category) h += Number(t.amount);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const odemeler = useMemo(() => yaklasanOdemeler(db, 14), [db.transactions, db.accounts, db.sablonlar, db.ledgers]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const butceler = useMemo(() => db.budgets.filter((b) => b.ledger_id === db.aktif && b.month === ay), [db.budgets, db.aktif, ay]);
+  const butceOzet = useMemo(() => {
+    let bTop = 0;
+    let bHar = 0;
+    butceler.forEach((b) => {
+      bTop += b.limit;
+      let h = 0;
+      txs.forEach((t) => {
+        if (t.type === "expense" && t.date.slice(0, 7) === b.month && t.category === b.category) h += Number(t.amount);
+      });
+      bHar += Math.min(h, b.limit);
     });
-    bHar += Math.min(h, b.limit);
-  });
-  const bYuz = bTop ? Math.round((bHar / bTop) * 100) : 0;
+    const bYuz = bTop ? Math.round((bHar / bTop) * 100) : 0;
+    return { bTop, bHar, bYuz };
+  }, [butceler, txs]);
+  const { bTop, bHar, bYuz } = butceOzet;
   const hedefler = db.goals.slice(0, 3);
-  const sonKilo = [...db.weights].sort((a, c) => (a.date < c.date ? -1 : 1)).pop();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const sonKilo = useMemo(() => [...db.weights].sort((a, c) => (a.date < c.date ? -1 : 1)).pop(), [db.weights]);
   const defterAd = db.ledgers.find((d) => d.id === db.aktif)?.name ?? "";
-  const son6: { k: string; net: number }[] = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date();
-    d.setMonth(d.getMonth() - i);
-    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    let gg = 0;
-    let cc = 0;
-    txs.forEach((t) => {
-      if (t.date.slice(0, 7) !== k) return;
-      if (t.type === "income") gg += Number(t.amount);
-      if (t.type === "expense") cc += Number(t.amount);
-    });
-    son6.push({ k, net: gg - cc });
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const son6 = useMemo(() => {
+    const cikis: { k: string; net: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      let gg = 0;
+      let cc = 0;
+      txs.forEach((t) => {
+        if (t.date.slice(0, 7) !== k) return;
+        if (t.type === "income") gg += Number(t.amount);
+        if (t.type === "expense") cc += Number(t.amount);
+      });
+      cikis.push({ k, net: gg - cc });
+    }
+    return cikis;
+  }, [txs]);
   const son6mx = Math.max(...son6.map((s) => Math.abs(s.net)), 1);
+
+  // Genel Bakış bölüm seçimi (⋮ menüsü)
+  const [wMenu, setWMenu] = useState(false);
+  const gw = db.widgetler?.[OZET_ANAHTAR];
+  const gwAcik = (kod: string) => gw ? gw.includes(kod) : GOVDE_WIDGETLAR.some((w) => w.kod !== "ozet" && w.kod !== "kilo");
+  const gwDegistir = (kod: string) =>
+    setDb((d) => {
+      const suanki = d.widgetler?.[OZET_ANAHTAR] ?? GOVDE_WIDGETLAR.filter((w) => w.kod !== "ozet").map((w) => w.kod);
+      const yeni = suanki.includes(kod) ? suanki.filter((x) => x !== kod) : [...suanki, kod];
+      return { ...d, widgetler: { ...(d.widgetler || {}), [OZET_ANAHTAR]: yeni } };
+    });
 
   return (
     <div className="space-y-3">
+      {/* ⋮ Ekranda gösterilecek bölümler */}
+      <div className="relative flex justify-end">
+        <button
+          onClick={() => setWMenu((v) => !v)}
+          title="Ekranda gösterilecek bölümler"
+          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[15px] leading-none text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+        >
+          ⋮
+        </button>
+        {wMenu && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setWMenu(false)} />
+            <div className="absolute right-0 top-full z-50 mt-2 w-[280px] rounded-2xl border border-slate-200 bg-white p-2 text-left shadow-xl">
+              <div className="mb-1 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                Genel Bakış bölümleri
+              </div>
+              {GOVDE_WIDGETLAR.map((w) => {
+                const acikMi = gwAcik(w.kod);
+                return (
+                  <button key={w.kod} onClick={() => gwDegistir(w.kod)}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] transition hover:bg-slate-50">
+                    <span className={`grid h-[17px] w-[17px] shrink-0 place-items-center rounded border text-[10px] ${
+                      acikMi ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-transparent"}`}>✓</span>
+                    <span className={acikMi ? "text-slate-900" : "text-slate-400"}>{w.ad}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+
+      {gwAcik("ozet") && (
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat ikon="💰" renk="bg-slate-100" etiket={<>Net Durum • {defterAd}</>} deger={para(oz.net)} degerRenk={oz.net >= 0 ? "text-green-600" : "text-red-600"} />
         <Stat ikon="📈" renk="bg-green-100" etiket="Varlık" deger={para(oz.varlik)} degerRenk="text-green-600" />
         <Stat ikon="📉" renk="bg-red-100" etiket="Borç" deger={para(oz.borc)} degerRenk="text-red-600" />
         <Stat ikon="💵" renk="bg-blue-100" etiket="Bu Ay Tasarruf" deger={para(tasarruf)} />
       </div>
+      )}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
         <div className="space-y-3 lg:col-span-3">
-          <Card>
+          {gwAcik("sonIslem") && (
+<Card>
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-[15px] font-semibold">Son İşlemler</h3>
               <Btn kucuk ghost onClick={() => go("finans")}>Tümü →</Btn>
@@ -106,7 +169,9 @@ function Panel({ db, go, setDb }: { db: Db; go: (v: View) => void; setDb: (u: (d
               </table>
             )}
           </Card>
-          <Card>
+)}
+          {gwAcik("planlar") && (
+<Card>
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-[15px] font-semibold">Yaklaşan Planlar (7 gün)</h3>
               <Btn kucuk ghost onClick={() => go("zaman")}>Takvim →</Btn>
@@ -114,7 +179,9 @@ function Panel({ db, go, setDb }: { db: Db; go: (v: View) => void; setDb: (u: (d
             {yak.length === 0 ? <div className="py-4 text-center text-sm text-slate-400">Yaklaşan plan yok.</div> :
               yak.map((p) => <div key={p.id} className="py-1 text-[13px]">📅 <b>{trh(p.date)}</b> — {p.text}</div>)}
           </Card>
-          <Card>
+)}
+          { gwAcik("görevler") && (
+      <Card>
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-[15px] font-semibold">Görevler</h3>
               <Btn kucuk ghost onClick={() => go("gorev")}>Tümü →</Btn>
@@ -122,9 +189,11 @@ function Panel({ db, go, setDb }: { db: Db; go: (v: View) => void; setDb: (u: (d
             {gorevler.length === 0 ? <div className="py-4 text-center text-sm text-slate-400">Bekleyen görev yok 🎉</div> :
               gorevler.map((t) => <div key={t.id} className="py-1 text-[13px]">○ {t.text}</div>)}
           </Card>
+        ) }
         </div>
         <div className="space-y-3 lg:col-span-2">
-          <Card>
+          {gwAcik("odemeler") && (
+<Card>
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-[15px] font-semibold">🔔 Yaklaşan Ödemeler</h3>
               <Btn kucuk ghost onClick={() => go("finans")}>Finans →</Btn>
@@ -176,6 +245,8 @@ function Panel({ db, go, setDb }: { db: Db; go: (v: View) => void; setDb: (u: (d
               </div>
             )}
           </Card>
+)}
+          { gwAcik("buay") && (
           <Card>
             <h3 className="mb-2 text-[15px] font-semibold">Bu Ay</h3>
             <div className="flex justify-between py-1 text-sm"><span>Gelir</span><b className="text-green-600">{para(gelir)}</b></div>
@@ -190,7 +261,9 @@ function Panel({ db, go, setDb }: { db: Db; go: (v: View) => void; setDb: (u: (d
               ))}
             </div>
           </Card>
-          <Card>
+        ) }
+          {gwAcik("butce") && (
+<Card>
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-[15px] font-semibold">Bütçe Kullanımı</h3>
               <Btn kucuk ghost onClick={() => go("finans")}>Detay →</Btn>
@@ -205,7 +278,9 @@ function Panel({ db, go, setDb }: { db: Db; go: (v: View) => void; setDb: (u: (d
               </div>
             )}
           </Card>
-          <Card>
+)}
+          {gwAcik("hedef") && (
+<Card>
             <h3 className="mb-2 text-[15px] font-semibold">Hedefler</h3>
             {hedefler.length === 0 ? <div className="py-4 text-center text-sm text-slate-400">Hedef yok.</div> :
               hedefler.map((o) => {
@@ -220,6 +295,8 @@ function Panel({ db, go, setDb }: { db: Db; go: (v: View) => void; setDb: (u: (d
                 );
               })}
           </Card>
+)}
+          {gwAcik("kilo") && (
           <Card>
             <div className="mb-1 flex items-center justify-between">
               <h3 className="text-[15px] font-semibold">Kilo</h3>
@@ -230,6 +307,7 @@ function Panel({ db, go, setDb }: { db: Db; go: (v: View) => void; setDb: (u: (d
                 <div className="text-xs text-slate-400">Son: {trh(sonKilo.date)}</div></div>
             ) : <div className="py-4 text-center text-sm text-slate-400">Kayıt yok.</div>}
           </Card>
+          )}
         </div>
       </div>
     </div>
@@ -441,7 +519,8 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
         </div>
         <div className="mt-3 anim-giris" key={view}>
           {view === "panel" && <Panel db={db} go={setView} setDb={setDb} />}
-          {view === "finans" && <Finans db={db} setDb={setDb} />}
+          {view === "finans" && <Finans db={db} setDb={setDb} go={setView} />}
+          {view === "butce" && <ButceView db={db} setDb={setDb} go={setView} />}
           {view === "zaman" && <ZamanView db={db} setDb={setDb} />}
           {view === "gorev" && <GorevView db={db} setDb={setDb} />}
           {view === "kilo" && <KiloView db={db} setDb={setDb} />}
@@ -496,6 +575,20 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
   );
 }
 
+/** Genel Bakış bölümleri. ⋮ menüsünden açılır/kapanır. */
+const GOVDE_WIDGETLAR = [
+  { kod: "ozet", ad: "Özet (net durum, varlık, borç, tasarruf)" },
+  { kod: "sonIslem", ad: "Son İşlemler" },
+  { kod: "planlar", ad: "Yaklaşan Planlar (7 gün)" },
+  { kod: "odemeler", ad: "Yaklaşan Ödemeler" },
+  { kod: "görevler", ad: "Görevler" },
+  { kod: "butce", ad: "Bütçe Kullanımı" },
+  { kod: "hedef", ad: "Hedefler" },
+  { kod: "kilo", ad: "Kilo" },
+  { kod: "buay", ad: "Bu Ay" }
+];
+const OZET_ANAHTAR = "__genel";
+
 export default function Home() {
   const [eposta, setEposta] = useState<string | null>(null);
   const [hazir, setHazir] = useState(false);
@@ -506,12 +599,16 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // Hesap listesi hem tarayıcı deposunda hem kalıcı dosyada durur;
-    // ikisi birleştirilmeden oturum kontrolü yapılmaz.
-    void kullanicilariYukle().finally(() => {
+    // Oturum varsa doğrudan gir; yoksa kayıtlı parolayla otomatik giriş dene
+    // ("Beni hatırla"). Başarısızsa giriş ekranı (hatırlanan değerlerle) açılır.
+    void (async () => {
+      await kullanicilariYukle();
+      if (!oturum()) {
+        try { await otomatikGiris(); } catch { /* sessiz: giriş ekranı açılır */ }
+      }
       setEposta(oturum());
       setHazir(true);
-    });
+    })();
   }, []);
 
   if (!hazir) return <div className="flex min-h-screen items-center justify-center bg-slate-900 text-sm text-slate-300">Yükleniyor...</div>;

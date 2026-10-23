@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bot, Camera, Download, LogOut, Printer, Send, Upload } from "lucide-react";
+import { Bot, Camera, Download, LogOut, Printer, Save, Send, Upload } from "lucide-react";
 import type { Db } from "../lib/store";
 import { ayToplam, artanKategoriler, butceOneri, kategoriGider } from "../lib/finance";
 import { buAy, bugun, oncekiAy, para, trh, uid } from "../lib/format";
@@ -10,7 +10,7 @@ import { dokumHtml, dokumIndir, dokumXls, type Dokum, type DokumSatir } from "..
 import { bakiyeler } from "../lib/finance";
 import { pdfKaydet } from "../lib/elektron";
 import { otoListele, otoOku, type OtoBilgi } from "../lib/yedek";
-import { diskYedekListe, diskYedekOku, elektronVar } from "../lib/elektron";
+import { diskYedekListe, diskYedekOku, diskYedekYaz, elektronVar } from "../lib/elektron";
 import {
   VARSAYILAN_MODEL,
   VARSAYILAN_VISION,
@@ -327,6 +327,21 @@ export function RaporView({ db, setDb, replaceAll, anahtar }: Props & { anahtar:
 
   const yedekIndir = () => indir(`hesap-planim-yedek-${bugun()}.json`, JSON.stringify(db, null, 2), "application/json");
 
+  /** Şimdi yedek al: masaüstünde diske (uygulamadan çıkmadan), tarayıcıda indirir. */
+  const simdiYedekle = async () => {
+    if (elektronVar()) {
+      try {
+        await diskYedekYaz(JSON.stringify(db, null, 2));
+        setDiskListe(await diskYedekListe());
+        alert("Yedek diske alındı ✅\n\nYedekler klasöründe: son 24 yedek korunur, her 2 dakikada gizli yedek de alınır.");
+      } catch (e) {
+        alert("Yedek alınamadı: " + (e instanceof Error ? e.message : e));
+      }
+    } else {
+      yedekIndir();
+    }
+  };
+
   const yedekYukle = async (f: File) => {
     try {
       const d = JSON.parse(await f.text());
@@ -617,9 +632,14 @@ export function RaporView({ db, setDb, replaceAll, anahtar }: Props & { anahtar:
 
       <Card>
         <Baslik>Veri & Arşiv</Baslik>
-        <p className="mb-2 text-[13px] text-slate-500">Veriler yalnızca bu bilgisayarda. Yedek almayı unutma.</p>
+        <p className="mb-2 text-[13px] text-slate-500">
+          Veriler yalnızca bu bilgisayarda saklanır ve yedeklemeye gerek yok demek değil:
+          uygulama açık kaldığı sürece ~2 dakikada bir diske gizli yedek alınır, çıkarken
+          ayrıca "kapanış yedeği" bırakılır. Ama istediğin an "Şimdi Yedek Al" ile elle de alabilirsin.
+        </p>
         <div className="flex flex-wrap gap-2">
-          <Btn onClick={yedekIndir}><Download size={15} className="mr-1 inline" /> Yedek İndir (JSON)</Btn>
+          <Btn onClick={() => void simdiYedekle()}><Save size={15} className="mr-1 inline" /> Şimdi Yedek Al</Btn>
+          <Btn ghost onClick={yedekIndir}><Download size={15} className="mr-1 inline" /> Yedek İndir (JSON)</Btn>
           <Btn ghost onClick={() => yedekInput.current?.click()}><Upload size={15} className="mr-1 inline" /> Yedek Yükle</Btn>
           <Btn ghost onClick={() => csvInput.current?.click()}>CSV Aktar (Base44)</Btn>
           <Btn ghost tehlike onClick={() => {

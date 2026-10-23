@@ -58,6 +58,21 @@ export type Tx = {
 export type Budget = { id: string; ledger_id: string; month: string; category: string; limit: number };
 export type Goal = { id: string; name: string; target: number; saved: number; date: string };
 export type AltGorev = { id: string; text: string; done: boolean };
+export type TaskTemplate = {
+  id: string;
+  text: string;
+  prio: "dusuk" | "normal" | "yuksek";
+  tarih?: string;
+  baslangic?: string;
+  bitis?: string;
+  liste?: string;
+  sureDakika?: number;
+};
+export type PlanTemplate = {
+  id: string;
+  ad: string;
+  planlar: { text: string; saat: string; bitis?: string; sureDakika?: number }[];
+};
 export type Task = {
   id: string;
   text: string;
@@ -139,6 +154,10 @@ export type Db = {
   budgets: Budget[];
   goals: Goal[];
   tasks: Task[];
+  gorevSablonlari: TaskTemplate[];
+  planSablonlari: PlanTemplate[];
+  /** Kullanıcının eklediği özel kategoriler (sabit liste KATEGORILER'e eklenir) */
+  kategoriler: string[];
   plans: Plan[];
   sablonlar: Sablon[];
   habits: Habit[];
@@ -179,6 +198,14 @@ export type Ayarlar = {
 };
 
 export const KATEGORILER = ["Diğer", "Market", "Fatura", "Kira", "Maaş", "Ulaşım", "Yemek", "Sağlık", "Eğitim", "Eğlence", "Alışveriş", "Yatırım", "Abonelik", "Transfer"];
+
+/** Sabit kategorilere, kullanıcının eklediklerini birleştirir.
+ *  Bütçe / işlem / şablon formlarında hep bu kullanılır; Transfer dışlanması
+ *  ilgili formun işidir. */
+export function kategorilerListesi(db?: Db | null): string[] {
+  const ozel = Array.isArray(db?.kategoriler) ? db!.kategoriler.map((k) => String(k).trim()).filter(Boolean) : [];
+  return [...new Set([...KATEGORILER, ...ozel])];
+}
 export const VARSAYILAN_AYAR: Ayarlar = {
   tema: "acik",
   vurgu: "lacivert",
@@ -227,6 +254,16 @@ function seed(): Db {
       { id: "h1", ledger_id: "d1", name: "Nakit", type: "current", open: 0, limit: 0, ekstre: 0, beklenen: 0, vadeFark: 0 },
       { id: "h2", ledger_id: "d1", name: "Banka", type: "savings", open: 0, limit: 0, ekstre: 0, beklenen: 0, vadeFark: 0 }
     ],
+    gorevSablonlari: [
+      { id: "s1", text: "🏃 Sabah Koşusu", prio: "normal", baslangic: "07:00", bitis: "07:30" },
+      { id: "s2", text: "☕ Kahvaltı", prio: "normal" },
+      { id: "s3", text: "📚 Kitap Oku (30 sayfa)", prio: "dusuk" },
+      { id: "s4", text: "🧘 Meditasyon (10 dk)", prio: "dusuk" },
+      { id: "s5", text: "💊 Vitamin al", prio: "yuksek" },
+      { id: "s6", text: "📧 E-postaları yanıtla", prio: "normal" },
+    ],
+    planSablonlari: [],
+    kategoriler: [],
     transactions: [],
     budgets: [],
     goals: [],
@@ -342,26 +379,50 @@ export function useDb(anahtar: string = KEY) {
   }, [anahtar]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(anahtar, JSON.stringify(db));
-    } catch {
-      /* depolama dolu olabilir */
-    }
-    // D2: masaüstünde veri diske de yazılır (tarayıcı deposu silinse bile kaybolmaz)
-    if (typeof window !== "undefined" && window.elektron) {
+    if (typeof window === "undefined") return;
+    // Not: kayıt gecikmeli. Önceden her tuş vuruşunda iki kez JSON.stringify +
+    // senkron localStorage yazması arayüzü donduruyordu. Hem depoya hem dosyaya
+    // tek metinle, her tuş vuruşunda değil ~400 ms boşlukta yazılır.
+    const yaz = () => {
       const s = JSON.stringify(db);
-      window.clearTimeout((window as any).__hpDosyaYaz);
-      (window as any).__hpDosyaYaz = window.setTimeout(() => {
-        window.elektron?.veriYaz(s).catch(() => {});
-      }, 800);
-    }
+      try {
+        localStorage.setItem(anahtar, s);
+      } catch {
+        /* depolama dolu olabilir */
+      }
+      // D2: masaüstünde veri diske de yazılır (tarayıcı deposu silinse bile kaybolmaz)
+      window.elektron?.veriYaz(s).catch(() => {});
+      return s;
+    };
+    const id = window.setTimeout(yaz, 400);
+    // Uygulama kapanıyorsa bekleyen yazmayı ilet + altına "kapanış yedeği" bırak:
+    // kullanıcı uygulamadan çıkmadan çift taraflı güvenli olur (son veri + yedek).
+    const aninda = () => {
+      window.clearTimeout(id);
+      const s = yaz();
+      try {
+        window.elektron?.yedekYaz("z-kapanis-son.json", s).catch(() => {});
+      } catch {
+        /* masaüstü değilse yoksay */
+      }
+    };
+    window.addEventListener("beforeunload", aninda);
+    return () => {
+      window.clearTimeout(id);
+      window.removeEventListener("beforeunload", aninda);
+    };
   }, [db, anahtar]);
 
   const setDb = (updater: (d: Db) => Db) => {
-    setDbState((prev) => updater(structuredClone(prev)));
+    // Not: structuredClone burada her tuş vuruşunda tüm veritabanını klonlayıp,
+    // değişmeyen alanların referansını da bozarak tüm useMemo'ları geçersiz
+    // kılıyordu → arayüz veri büyüdükçe donuyordu. Güncelleyiciler zaten
+    // değişmez(stil) yazıldığı için sığ kopya yeterli: değişmeyen alanlar
+    // aynı referansta kalır, memo önbellekleri çalışır.
+    setDbState((prev) => ({ ...prev, ...updater(prev) }));
   };
 
-  const replaceAll = (next: Db) => setDbState(next);
+  const replaceAll = (next: Db) => setDbState(tazele(next));
 
   return { db, setDb, replaceAll, kurtarma: ilk.not };
 }

@@ -2,8 +2,6 @@
 // Hiçbir veri dışarı gönderilmez; "şifremi unuttum" kayıt olurken belirlenen
 // güvenlik sorusuyla çalışır (e-posta gönderimi yerel uygulamada mümkün değildir).
 
-import { dosyaKullanicilarOku, dosyaKullanicilarYaz } from "./elektron";
-
 export type Kullanici = {
   ad: string;
   eposta: string;
@@ -17,10 +15,6 @@ const KULLANICILAR = "hp-users";
 const OTURUM = "hp-session";
 const TUZ = "hesap-planim-v1::";
 
-// Kullanıcı listesi hem localStorage'da hem de kalıcı dosyada tutulur.
-// localStorage origin'e bağlıdır (file:// / app:// / http://localhost:3000
-// ayrı depolardır); dosya ise her durumda aynı yerde durur. Bu yüzden
-// "e-posta kayıtlı değil" hatası bir daha oluşmaz.
 let onbellek: Kullanici[] | null = null;
 
 async function sha256(metin: string): Promise<string> {
@@ -44,20 +38,10 @@ function parca(cozdur: string | null): Kullanici[] | null {
   }
 }
 
-/** Uygulama açılışında bir kez çağrılır: iki depo birleştirilir.
- *  Daha çok hesabı olan depo kazanır; hiçbiri yoksa boş liste. */
+/** Uygulama açılışında bir kez çağrılır: localStorage'dan yükler. */
 export async function kullanicilariYukle(): Promise<void> {
   const yerel = parca(localStorage.getItem(KULLANICILAR));
-  const dosya = parca(await dosyaKullanicilarOku());
-  if (dosya && (!yerel || dosya.length > yerel.length)) {
-    onbellek = dosya;
-    try { localStorage.setItem(KULLANICILAR, JSON.stringify(dosya)); } catch { /* */ }
-  } else if (yerel && yerel.length > 0) {
-    onbellek = yerel;
-    if (!dosya) await dosyaKullanicilarYaz(JSON.stringify(yerel));
-  } else {
-    onbellek = [];
-  }
+  onbellek = yerel ?? [];
 }
 
 function oku(): Kullanici[] {
@@ -70,7 +54,12 @@ function oku(): Kullanici[] {
 async function yaz(liste: Kullanici[]) {
   onbellek = liste;
   try { localStorage.setItem(KULLANICILAR, JSON.stringify(liste)); } catch { /* */ }
-  await dosyaKullanicilarYaz(JSON.stringify(liste));
+}
+
+/** Tüm kullanıcı işlemlerinde önce yükle. */
+async function hazir(): Promise<Kullanici[]> {
+  await kullanicilariYukle();
+  return oku();
 }
 
 const norm = (e: string) => e.trim().toLocaleLowerCase("tr");
@@ -84,7 +73,7 @@ export async function kayitOl(ad: string, eposta: string, parola: string, soru: 
   if (parola.length < 6) return "Parola en az 6 karakter olmalı.";
   if (!soru.trim()) return "Güvenlik sorusu seç ya da yaz.";
   if (cevap.trim().length < 2) return "Güvenlik cevabı yaz.";
-  const liste = oku();
+  const liste = await hazir();
   if (liste.some((k) => k.eposta === eposta)) return "Bu e-posta zaten kayıtlı. Giriş yap.";
   liste.push({
     ad,
@@ -101,12 +90,14 @@ export async function kayitOl(ad: string, eposta: string, parola: string, soru: 
 
 export async function giris(eposta: string, parola: string, beniHatirla = false): Promise<string | null> {
   eposta = norm(eposta);
-  const k = oku().find((x) => x.eposta === eposta);
+  const liste = await hazir();
+  const k = liste.find((x) => x.eposta === eposta);
   if (!k) return "Bu e-posta kayıtlı değil. Önce kayıt ol.";
   const ozet = await sha256("pw:" + eposta + ":" + parola);
   if (ozet !== k.parola) return "Parola hatalı.";
   localStorage.setItem(OTURUM, eposta);
-  hatirlaAyarla(eposta, beniHatirla);
+  // Beni hatırla: parolayı da sakla → sonraki açılışta otomatik giriş yapılır.
+  hatirlaAyarla(eposta, beniHatirla, parola);
   return null;
 }
 
@@ -161,9 +152,17 @@ export function oturumHatirliMi(): boolean {
   return !!hatirlanan().eposta;
 }
 
-/** Giriş sonrası: kullanıcı "beni hatırla" / "parolayı kaydet" dediyse sakla. */
-export function hatirlaAyarla(eposta: string, parolayiHatirla: boolean): void {
-  hatirlaYaz(parolayiHatirla ? { eposta, parola: "" } : null);
+/** "Beni hatırla" seçiliyken kaydedilen parola sonraki açılışta otomatik
+ *  girişte kullanılır (yalnızca bu cihaz, localStorage). */
+export function hatirlaAyarla(eposta: string, parolayiHatirla: boolean, parola = ""): void {
+  hatirlaYaz(parolayiHatirla ? { eposta, parola } : null);
+}
+
+/** Otomatik giriş: kayıtlı parolayla giriş dener. */
+export async function otomatikGiris(): Promise<string | null> {
+  const h = hatirlanan();
+  if (!h.eposta || !h.parola) return null;
+  return await giris(h.eposta, h.parola, true);
 }
 
 /** Parolayı da sakla (yalnızca "beni hatırla" seçiliyken anlamlı). */

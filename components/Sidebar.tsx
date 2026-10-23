@@ -11,6 +11,7 @@ import {
   LayoutGrid,
   ListChecks,
   PenLine,
+  PieChart,
   Plus,
   Scale,
   Search,
@@ -25,6 +26,7 @@ export type View =
   | "zaman"
   | "gorev"
   | "finans"
+  | "butce"
   | "kilo"
   | "gunluk"
   | "not"
@@ -40,6 +42,7 @@ const MENU: MenuOge[] = [
   { id: "zaman", ad: "Zaman Planlama", ikon: <CalendarDays size={17} />, not: "Günlük, haftalık, aylık takvim" },
   { id: "gorev", ad: "Görevler", ikon: <ListChecks size={17} />, not: "Listeler, ilerleme, tarih" },
   { id: "finans", ad: "Finansal Yönetim", ikon: <Wallet size={17} />, not: "Defter, hesap, kart, çek/fatura" },
+  { id: "butce", ad: "Bütçe Dağılımı", kisa: "Bütçe", ikon: <PieChart size={17} />, not: "Aylık bütçe dağılımı ve takip" },
   { id: "kilo", ad: "Kilo & Beslenme", ikon: <Scale size={17} />, not: "Kilo takibi ve ölçümler" },
   { id: "gunluk", ad: "Günlüğüm", ikon: <PenLine size={17} />, not: "Ruh hali ve günlük kayıtları" },
   { id: "not", ad: "Notlar", ikon: <StickyNote size={17} />, not: "Serbest notlar ve listeler" },
@@ -55,7 +58,7 @@ type MenuGrup = { id: string; ad: string; ikon: React.ReactNode; ozet: string; o
  * Menü satırı böylece hiçbir genişlikte taşmıyor (yatay kaydırma gerekmiyor).
  */
 const GRUPLAR: MenuGrup[] = [
-  { id: "finans", ad: "Finans", ikon: <Coins size={17} />, ozet: "Para işleri", ogeler: ["finans", "rapor"] },
+  { id: "finans", ad: "Finans", ikon: <Coins size={17} />, ozet: "Para işleri", ogeler: ["finans", "butce", "rapor"] },
   {
     id: "plan",
     ad: "Plan & Yaşam",
