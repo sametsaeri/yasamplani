@@ -73,12 +73,29 @@ Canlı testler bunu doğruladı (aşağıda).
 - `npm run build` ✅ (web/vercel)
 - `npm run dist:web` ✅ (out/: index/giris/kayit/indir/uygulama.html + ikonlar + sw + manifest)
 
-## 7) Deploy 🔁
-- Vercel otomatik deploy (git push ile). Bu commit ile canlıya gidecek.
-- Canlı doğrulama: https://yasamplanlama.vercel.app/ yeni landing göstermeli.
-- NOT: Proje eski haliyle Vercel'de derleniyordu; yeni derleme de yeşil (build yeşil).
+## 7) Deploy ✅ CANLIYA GİTTİ (bu gece)
+- **Sorun**: İlk push'ta GitHub **Push Protection** engelledi — `hesap-planim/vercel.json`
+  içinde **Google OAuth Client ID + Client Secret** (`env` bloğu) repoya girmeye çalışıyordu.
+- **İyileştirme**: geçmiş (git history) `filter-branch` ile temizlendi — secret içeren
+  `a3c5c40` ve `6a6fe6b` commit'leri yeniden yazıldı (yeni SHA: `1e6db8c`, `a1811b7`).
+  Artık geçmişte gizli anahtar YOK (push protection temiz geçti).
+- **Yapı farkı**: Vercel'in izlediği repo `yasamplani` (github.com/sametsaeri/yasamplani.git,
+  dal `main`) ve eski yapıda dosyalar repo kökündeydi. Bizim dosyalar `hesap-planim/` altında
+  olduğu için `git subtree split -P hesap-planim -b deploy-main` ile dosyalar kökte olan
+  bir deploy dalı üretilip `yasamplani/main`'e force-push edildi (`39c29dd..02a4c61`).
+  Eski `main` güvenli tarafta `yedek-eski-yapi` dalına kopyalandı.
+- Ayrıca `origin` (github.com/sametsaeri/WEB-.git) boş depoyu `master` ile doldurduk (yedek).
+- **Canlı doğrulama** (https://yasamplanlama.vercel.app/):
+  - Yeni landing + `/giris` `/kayit` `/indir` `/uygulama` → hepsi 200 ✅
+  - Prod API: REGISTER ok/token ✅, LOGIN ok ✅ (Neon DB + bcrypt canıda)
+  - UI akış canıda: kayıt → /uygulama ✅; kayıtsız e-posta hatası ✅; çıkış → depo temiz ✅;
+    F5/`/uygulama` → `/giris`'e redirect, otomatik re-login YOK ✅
+  - `/api/indir/exe` sunucuda EXE yok → 404, sayfa "sunucuda yok" rehber moduna düşüyor ✅
+- ⚠️ **Dikkat**: vercel.json'dan `GOOGLE_CLIENT_ID/SECRET` kaldırıldı; bunlar Vercel proje
+  ayarlarındaki Environment Variables'dan gelmeli. Google girişi canıda çalışmıyorsa
+  bu değişkenleri Vercel dashboard'dan ekle.
 
-## 8) Kalan / Sonraki Adımlar
+## 8) Kalan / Sonraki Adımlar (bu gece durumu)
 - `npm run dist` ile yeni EXE paketi üret (kurulum/ klasörüne; İndir sayfası otomatik
   sunacaktır). İstersen EXE'yi Vercel'e commit'lemeden ayrı paylaşım kanala koyarız.
 - Electron penceresinde manuel spot test (file:// akışı, sync).
