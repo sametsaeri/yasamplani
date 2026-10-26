@@ -4,9 +4,13 @@ import { hashParola, tokenUret, cookieAyarla } from "@/lib/auth-server";
 
 export async function POST(req: NextRequest) {
   try {
-    const { ad, eposta, parola, soru, cevap } = await req.json();
-    if (!ad || !eposta || !parola) return NextResponse.json({ hata: "Eksik alan." }, { status: 400 });
+    const { ad, eposta: epostaGirdi, parola, soru, cevap } = await req.json();
+    if (!ad || !epostaGirdi || !parola) return NextResponse.json({ hata: "Eksik alan." }, { status: 400 });
     if (parola.length < 6) return NextResponse.json({ hata: "Parola en az 6 karakter." }, { status: 400 });
+    if (!soru || !String(soru).trim() || !cevap || !String(cevap).trim()) {
+      return NextResponse.json({ hata: "Güvenlik sorusu ve cevabı zorunludur (şifre sıfırlama için)." }, { status: 400 });
+    }
+    const eposta = String(epostaGirdi).trim().toLocaleLowerCase("tr");
 
     const mevcut = await prisma.user.findUnique({ where: { email: eposta } });
     if (mevcut) return NextResponse.json({ hata: "Bu e-posta zaten kayıtlı." }, { status: 409 });

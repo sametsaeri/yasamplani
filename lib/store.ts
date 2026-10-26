@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cloudDataGetir, cloudDataKaydet } from "./api";
 
 export type Ledger = {
@@ -167,6 +167,9 @@ export type Db = {
   meals: Meal[];
   journal: Journal[];
   notes: Note[];
+  /** Bulut senkronu zaman damgası: bu veri son olarak ne zaman yazıldı (ISO).
+   *  PC (masaüstü) ↔ Web senkronunda hangi tarafın güncel olduğunu anlamaya yarar. */
+  sonKayit?: string;
   /** Kullanıcının oluşturduğu görev listeleri. Liste, görevlerden TÜRETİLMEZ;
    *  aksi halde son görev silinince liste de kayboluyordu. Eski kayıtlarda yoksa
    *  görevlerden türetilerek doldurulur. */
@@ -350,12 +353,50 @@ function load(anahtar: string): { db: Db; not: string | null } {
   return { db: seed(), not: null };
 }
 
+export type SenkronDurum = "beklemede" | "gonderiliyor" | "tamam" | "buluttan-alindi" | "kapatildi" | "baglanti-yok";
+
+export type SenkronBilgi = {
+  durum: SenkronDurum;
+  /** Durumun oluştuğu saat ("14:32") */
+  zaman: string;
+  /** Elle yeniden senkronlama (KullanıcıPaneli → "Şimdi senkronla") */
+  guncelle: () => void;
+};
+
+/** senkron durumu sarmalayıcısı — setDb yeniden çizim yapmadan güncellenir. */
+function saatDamgasi(): string {
+  return new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** localStorage'daki anahtarın verisini Db olarak okur (geçerliyse). */
+function yerelDbOku(anahtar: string): Db | null {
+  try {
+    const raw = localStorage.getItem(anahtar);
+    const d = raw ? JSON.parse(raw) : null;
+    if (d && Array.isArray(d.ledgers) && d.ledgers.length > 0) return d as Db;
+  } catch { /* yoksay */ }
+  return null;
+}
+
+/** localStorage'daki verinin sonKayit zaman damgası (ms; yoksa 0). */
+function yerelZamanOku(anahtar: string): number {
+  const d = yerelDbOku(anahtar);
+  return Date.parse(d?.sonKayit || "") || 0;
+}
+
 export function useDb(anahtar: string = KEY) {
   const [ilk] = useState(() => {
     if (typeof window === "undefined") return { db: seed(), not: null as string | null };
     return load(anahtar);
   });
   const [db, setDbState] = useState<Db>(ilk.db);
+  const [senkron, setSenkron] = useState<{ durum: SenkronDurum; zaman: string }>(() => ({
+    durum: "beklemede",
+    zaman: ""
+  }));
+  // Son yerel yazma zamanı (ms) — bulut çakışma çözümünde kullanılır
+  const sonYerelYazimRef = useRef(0);
+  const yaziyorRef = useRef(false);
 
   // D2: localStorage boş/bozuksa dosya veritabanından otomatik geri yükleme
   useEffect(() => {
@@ -402,28 +443,67 @@ export function useDb(anahtar: string = KEY) {
       .catch(() => {});
   }, [anahtar]);
 
-  // Bulut (Neon) senkronizasyonu: ilk açılışta sunucudan veriyi çek; yoksa yerel
-  // veriyi sunucuya it (masaüstü→web taşıma). Ardından her kayıtta sunucuya yaz.
-  useEffect(() => {
+  const sunucuDok = (veri: unknown): veri is Db => {
+    const d = veri as Db;
+    return !!(d && Array.isArray(d.ledgers) && d.ledgers.length > 0);
+  };
+
+  // Bulut (Neon) senkronizasyonu: PC (masaüstü) ↔ Web artık "son yazan kazanır"
+  // zaman damgasıyla güvenli şekilde eşleşir:
+  //  - Sunucudaki veri DAHA YENİ ise → bulut tarafı uygulanır (başka cihazda
+  //    yapılmış değişiklikler buraya gelir).
+  //  - Yerel veri DAHA YENİ ise → yerel veri sunucuya itilir.
+  //  - 2 dakikada bir sessiz kontrol: başka cihazda değişiklik varsa buraya gelir.
+  const iptalRef = useRef(false);
+  const senkronYap = useCallback(async (): Promise<void> => {
     if (typeof window === "undefined") return;
-    let iptal = false;
-    (async () => {
+    try {
+      setSenkron((s) => (s.durum === "beklemede" || s.durum === "baglanti-yok" ? { ...s, durum: "gonderiliyor" } : s));
       const sunucu = await cloudDataGetir();
-      if (iptal) return;
-      if (sunucu && Array.isArray(sunucu.ledgers) && sunucu.ledgers.length > 0) {
-        setDbState(tazele(sunucu));
+      if (iptalRef.current) return;
+      if (sunucuDok(sunucu)) {
+        const sunucuT = Date.parse(sunucu.sonKayit || "") || 0;
+        const yerelT = yerelZamanOku(anahtar);
+        if (sunucuT > yerelT + 2000) {
+          // Bulut daha güncel (başka cihazda daha yeni yazıldı) → uygula
+          setDbState(tazele(sunucu));
+          setSenkron({ durum: "buluttan-alindi", zaman: saatDamgasi() });
+          return;
+        }
+        // yerel güncel/berabere → sunucu zaten bizden; durum tamam sayılır
+        setSenkron({ durum: "tamam", zaman: saatDamgasi() });
         return;
       }
-      // sunucu boş → yerel veriyi sunucuya it (varsa)
+      // Sunucu boş → yereli sunucuya it (varsa)
       try {
-        const raw = localStorage.getItem(anahtar);
-        const d = raw ? JSON.parse(raw) : null;
-        if (d && Array.isArray(d.ledgers) && d.ledgers.length > 0) {
-          await cloudDataKaydet(d);
+        const d = yerelDbOku(anahtar);
+        if (d) {
+          const ok = await cloudDataKaydet(d);
+          setSenkron(ok
+            ? { durum: "tamam", zaman: saatDamgasi() }
+            : { durum: "baglanti-yok", zaman: saatDamgasi() });
+        } else {
+          setSenkron({ durum: "beklemede", zaman: saatDamgasi() });
         }
-      } catch { /* sessiz */ }
-    })();
-    return () => { iptal = true; };
+      } catch {
+        setSenkron({ durum: "baglanti-yok", zaman: saatDamgasi() });
+      }
+    } catch {
+      setSenkron({ durum: "baglanti-yok", zaman: saatDamgasi() });
+    }
+  }, [anahtar]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    iptalRef.current = false;
+    void senkronYap();
+    // Diğer cihazda yapılan değişiklikleri periyodik çek (2 dakikada bir)
+    const id = window.setInterval(() => {
+      if (yaziyorRef.current) return;
+      void senkronYap();
+    }, 120_000);
+    return () => { iptalRef.current = true; window.clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anahtar]);
 
   useEffect(() => {
@@ -432,16 +512,24 @@ export function useDb(anahtar: string = KEY) {
     // senkron localStorage yazması arayüzü donduruyordu. Hem depoya hem dosyaya
     // tek metinle, her tuş vuruşunda değil ~400 ms boşlukta yazılır.
     const yaz = () => {
-      const s = JSON.stringify(db);
+      yaziyorRef.current = true;
+      // Son yazma zamanı damgası — bulutla eşleşmede "kim daha yeni" buradan bilinir
+      const damga = new Date().toISOString();
+      sonYerelYazimRef.current = Date.parse(damga);
+      const s = JSON.stringify({ ...db, sonKayit: damga });
       try {
         localStorage.setItem(anahtar, s);
       } catch {
         /* depolama dolu olabilir */
       }
       // Bulut (Neon): her kayıtta sunucuya yaz (debounced, fire-and-forget)
-      cloudDataKaydet(db).catch(() => {});
+      cloudDataKaydet(s)
+        .then((ok) => ok && setSenkron({ zaman: saatDamgasi(), durum: "tamam" }))
+        .catch(() => {});
       // D2: masaüstünde veri diske de yazılır (tarayıcı deposu silinse bile kaybolmaz)
       window.elektron?.veriYaz(s).catch(() => {});
+      // yazma kilidini hemen sonra aç (periyodik bulut kontrolünü engellememek için)
+      window.setTimeout(() => { yaziyorRef.current = false; }, 1200);
       return s;
     };
     const id = window.setTimeout(yaz, 400);
@@ -460,6 +548,7 @@ export function useDb(anahtar: string = KEY) {
     return () => {
       window.clearTimeout(id);
       window.removeEventListener("beforeunload", aninda);
+      yaziyorRef.current = false;
     };
   }, [db, anahtar]);
 
@@ -474,5 +563,11 @@ export function useDb(anahtar: string = KEY) {
 
   const replaceAll = (next: Db) => setDbState(tazele(next));
 
-  return { db, setDb, replaceAll, kurtarma: ilk.not };
+  const senkronBilgi: SenkronBilgi = {
+    durum: senkron.durum,
+    zaman: senkron.zaman,
+    guncelle: () => { void senkronYap(); }
+  };
+
+  return { db, setDb, replaceAll, kurtarma: ilk.not, senkron: senkronBilgi };
 }

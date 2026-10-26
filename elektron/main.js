@@ -146,10 +146,13 @@ function ac() {
     }
   });
   if (process.env.ELECTRON_DEV) {
-    pencere.loadURL("http://localhost:3000");
+    pencere.loadURL("http://localhost:3000/uygulama");
   } else {
-    // file:// — orijinal origin, localStorage ve kullanıcı listesi korunur
-    pencere.loadFile(path.join(__dirname, "..", "out", "index.html"));
+    // file:// — orijinal origin, localStorage ve kullanıcı listesi korunur.
+    // Uygulama hızlıca çalışsın: panele (uygulama.html) git; bulunamazsa landing'e düş.
+    const panel = path.join(__dirname, "..", "out", "uygulama.html");
+    if (fs.existsSync(panel)) pencere.loadFile(panel);
+    else pencere.loadFile(path.join(__dirname, "..", "out", "index.html"));
   }
 }
 

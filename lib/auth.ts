@@ -15,6 +15,7 @@ import { sha256 as sha256Yedek } from "./sha256";
 
 const KULLANICILAR = "hp-users";
 const OTURUM = "hp-session";
+const HP_KILIT = "hp-kilit";
 const TUZ = "hesap-planim-v1::";
 
 let onbellek: Kullanici[] | null = null;
@@ -113,10 +114,15 @@ export function oturum(): string | null {
 export function cikis() {
   try {
     localStorage.removeItem(OTURUM);
-    localStorage.removeItem(HATIRLA);
   } catch {
     /* yok say */
   }
+}
+
+/** Tam çıkışta çağrılır: hatırlanan e-posta/parola kaydını da temizler.
+ *  Böylece çıkış yapıp F5'leyen biri otomatik girişle geri dönemez. */
+export function unut() {
+  try { localStorage.removeItem(HATIRLA); sessionStorage.removeItem(HP_KILIT); } catch { /* */ }
 }
 
 // --- Beni hatırla ------------------------------------------------------

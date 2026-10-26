@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Db } from "../lib/store";
+import type { SenkronBilgi } from "../lib/store";
 import type { View } from "./Sidebar";
 import { paraGir, paraGirCanli, parayaCevir } from "../lib/para";
+import { pwaKurulumKullan } from "./PwaKayit";
 
 export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <div className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ${className}`}>{children}</div>;
@@ -196,10 +198,12 @@ import {
   CircleDot,
   CircleHelp,
   CreditCard,
+  Download,
   Home,
   Landmark,
   Lock,
   LogOut,
+  MonitorDown,
   PiggyBank,
   Plus,
   Receipt,
@@ -344,6 +348,7 @@ export function KullaniciPaneli({
   setAktif,
   setView,
   kilitle,
+  senkron,
   cikisYap
 }: {
   db: Db;
@@ -353,6 +358,7 @@ export function KullaniciPaneli({
   setAktif: (id: string) => void;
   setView: (v: View) => void;
   kilitle: () => void;
+  senkron?: SenkronBilgi;
   cikisYap: () => void;
 }) {
   const [acik, setAcik] = useState(false);
@@ -368,6 +374,21 @@ export function KullaniciPaneli({
     });
   const basHarf = (ad || eposta).trim().charAt(0).toLocaleUpperCase("tr");
   const aktifDefter = db.ledgers.find((d) => d.id === db.aktif);
+  // PWA: tarayıcıda "kurulu örnek" var mı? (Electron'da gereksiz)
+  const { tur: pwaHazir, kur: pwaKur } = pwaKurulumKullan();
+  const masaustuMu = typeof window !== "undefined" && !!(window as any).elektron;
+  const senkronMetni = (() => {
+    if (!senkron) return null;
+    const z = senkron.zaman ? ` · ${senkron.zaman}` : "";
+    switch (senkron.durum) {
+      case "tamam": return `Bulut senkronu ✓${z}`;
+      case "gonderiliyor": return "Senkronlanıyor…";
+      case "buluttan-alindi": return `Buluttan alındı${z}`;
+      case "baglanti-yok": return "Bağlantı yok — veriler yerelde";
+      case "beklemede": return "Yerel mod";
+      default: return null;
+    }
+  })();
 
   useEffect(() => {
     if (!acik) return;
@@ -466,6 +487,31 @@ export function KullaniciPaneli({
               </button>
             </div>
 
+            {/* SENKRON (PC ↔ Web bulut eşleşme durumu) */}
+            <div className="border-b border-slate-100 py-1.5">
+              <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Senkron</div>
+              {senkronMetni && (
+                <div className="flex items-center gap-2 px-3 py-1 text-[12px] text-slate-600">
+                  <span aria-hidden>☁</span>
+                  <span className="flex-1">{senkronMetni}</span>
+                </div>
+              )}
+              <button
+                onClick={() => { senkron?.guncelle(); }}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition hover:bg-slate-50"
+                title="Bulutla şimdi eşleş (diğer cihazdaki değişiklikleri de çeker)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-slate-500">
+                  <path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" />
+                </svg>
+                Şimdi senkronla
+              </button>
+              <div className="px-3 pb-1 text-[10px] leading-snug text-slate-400">
+                Web sayfası ile PC uygulaması aynı bulut hesabına yazar; hangi tarafta
+                son değişiklik yapıldıysa o otomatik netleşir, hiçbir veri ezilmez.
+              </div>
+            </div>
+
             {/* OTURUM */}
             <div className="border-b border-slate-100 py-1.5">
               <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Oturum</div>
@@ -512,6 +558,23 @@ export function KullaniciPaneli({
               >
                 <Settings size={14} className="shrink-0 text-slate-500" /> Ayarlar &amp; yedekler
               </button>
+              {!masaustuMu && (
+                <a
+                  href="/indir"
+                  onClick={() => setAcik(false)}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition hover:bg-slate-50"
+                >
+                  <Download size={14} className="shrink-0 text-slate-500" /> İndir &amp; Kur (PC, Mac, telefon)
+                </a>
+              )}
+              {!masaustuMu && pwaHazir && (
+                <button
+                  onClick={() => { void pwaKur(); setAcik(false); }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] font-medium text-indigo-600 transition hover:bg-indigo-50"
+                >
+                  <MonitorDown size={14} className="shrink-0" /> Uygulamayı bu cihaza yükle
+                </button>
+              )}
               <button
                 onClick={() => { setAcik(false); setView("yardim"); }}
                 className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition hover:bg-slate-50"

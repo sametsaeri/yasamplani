@@ -3,7 +3,7 @@
 
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { cookies, headers } from "next/";
+import { cookies, headers } from "next/headers";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me-in-prod";
 const COOKIE = "hp_token";

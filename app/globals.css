@@ -96,6 +96,10 @@ textarea:focus-visible {
 .anim-giris > *:nth-child(n + 5) {
   animation-delay: 0.2s;
 }
+/*timeline adımları: elemanın kendisi animasyonlu (gecikme satır bazlı) */
+.anim-sirali {
+  animation: fadeYukari 0.35s ease backwards;
+}
 .cubuk-anim {
   transform-origin: left;
   animation: cubukBuyume 0.6s ease both;
@@ -114,7 +118,9 @@ textarea:focus-visible {
   .cubuk-anim,
   .sutun-anim,
   .cizgi-anim,
-  .pil-dolum {
+  .pil-dolum,
+  .hp-orb,
+  .anim-sirali {
     animation: none !important;
   }
 }
@@ -130,6 +136,38 @@ textarea:focus-visible {
   to {
     transform: scaleX(1);
   }
+}
+
+/* --- İndir sayfası: hafif ızgara + ışıma küreleri ------------------------- */
+.hp-izgara {
+  background-image:
+    linear-gradient(to right, rgb(148 163 184 / 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(148 163 184 / 0.06) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(ellipse 90% 65% at 50% 0%, black 35%, transparent 100%);
+  mask-image: radial-gradient(ellipse 90% 65% at 50% 0%, black 35%, transparent 100%);
+}
+@keyframes hpOrbSunus {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(24px, -18px) scale(1.08); }
+  66% { transform: translate(-18px, 14px) scale(0.95); }
+}
+.hp-orb { animation: hpOrbSunus 14s ease-in-out infinite; }
+.hp-orb-2 { animation-duration: 18s; animation-delay: -4s; }
+.hp-orb-3 { animation-duration: 22s; animation-delay: -9s; }
+
+/* Kod parçaları (kurulum rehberi) */
+.kod {
+  border-radius: 6px;
+  background: rgb(2 6 23 / 0.7);
+  padding: 1px 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: #a5b4fc;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hp-orb { animation: none !important; }
 }
 
 @media print {

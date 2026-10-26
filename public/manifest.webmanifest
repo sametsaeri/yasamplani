@@ -1,0 +1,25 @@
+{
+  "name": "Hesap Planım — Muhasebe & Bütçe",
+  "short_name": "Hesap Planım",
+  "description": "Kişisel muhasebe ve yaşam planlama. Defterler, hesaplar, bütçe, görevler ve daha fazlası — tek ve sade ekranda.",
+  "lang": "tr",
+  "dir": "ltr",
+  "start_url": "/uygulama",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "categories": ["finance", "productivity", "lifestyle"],
+  "icons": [
+    { "src": "/ikonlar/ikon-maske-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/ikonlar/ikon-maske-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/ikonlar/ikon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/ikonlar/ikon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Uygulamayı Aç", "url": "/uygulama", "icons": [{ "src": "/ikonlar/ikon-192.png", "sizes": "192x192" }] },
+    { "name": "İndir & Kur", "url": "/indir", "icons": [{ "src": "/ikonlar/ikon-192.png", "sizes": "192x192" }] }
+  ]
+}

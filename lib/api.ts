@@ -44,6 +44,24 @@ export async function cloudKayit(ad: string, eposta: string, parola: string, sor
 export async function cloudCikis() {
   try { await istek("/api/auth/logout", { method: "POST" }); } catch { /* */ }
   apiTokenAyarla(null);
+  // Sunucu çerezini de düşürmek için bir kez daha deniyoruz (credentials: include)
+  try { await fetch(BASE + "/api/auth/logout", { method: "POST", credentials: "include" }); } catch { /* */ }
+}
+
+/** "Şifremi unuttum" 1. adım: e-postaya kayıtlı güvenlik sorusunu getirir. */
+export async function cloudSoruyuGetir(eposta: string): Promise<string | null> {
+  try {
+    const v = await istek("/api/auth/reset-soru", { method: "POST", body: JSON.stringify({ eposta }) });
+    return v?.soru || null;
+  } catch { return null; }
+}
+
+/** "Şifremi unuttum" 2. adım: güvenlik cevabını doğrulayıp parolayı yeniler (veritabanı). */
+export async function cloudSifirla(eposta: string, cevap: string, yeni: string): Promise<string | null> {
+  try {
+    await istek("/api/auth/reset", { method: "POST", body: JSON.stringify({ eposta, cevap, yeni }) });
+    return null;
+  } catch (e: any) { return e.message || "Sıfırlama başarısız."; }
 }
 export async function cloudDataGetir(): Promise<any | null> {
   try { const v = await istek("/api/data"); return v.ok ? v.data : null; }

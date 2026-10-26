@@ -1,6 +1,6 @@
 {
   "name": "hesap-planim",
-  "version": "1.1.6",
+  "version": "1.2.0",
   "private": true,
   "main": "elektron/main.js",
   "scripts": {
@@ -10,7 +10,10 @@
     "postinstall": "prisma generate",
     "desktop:dev": "set ELECTRON_DEV=1&& electron .",
     "desktop": "set NEXT_EXPORT=1&& next build && electron .",
-    "dist": "set NEXT_EXPORT=1&& next build && electron-builder --win nsis"
+    "dist": "set NEXT_EXPORT=1&& next build && electron-builder --win nsis",
+    "dist:mac": "set NEXT_EXPORT=1&& next build && electron-builder --mac dmg",
+    "dist:linux": "set NEXT_EXPORT=1&& next build && electron-builder --linux AppImage",
+    "dist:web": "set NEXT_EXPORT=1&& next build"
   },
   "dependencies": {
     "@neon/config": "^1.9.3",
@@ -19,7 +22,7 @@
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.454.0",
-    "next": "14.2.18",
+    "next": "14.2.35",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
@@ -58,6 +61,20 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "shortcutName": "Hesap Planım"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.finance",
+      "icon": "public/ikonlar/ikon-512.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office",
+      "icon": "public/ikonlar/ikon-512.png"
     }
   }
 }

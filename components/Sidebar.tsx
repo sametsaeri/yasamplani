@@ -199,14 +199,13 @@ export default function Sidebar({
         {/* satır 1: logo + defter seçici + yerel rozeti */}
         <div className="flex items-center gap-3 px-4 pt-2.5">
           <div className="flex shrink-0 items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-white text-slate-900">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 19V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2Z" />
-                <path d="M4 19a2 2 0 0 0 2 2h13" />
-                <path d="M9 8h6M9 12h4" />
-                <path d="m15 16 2 2 4-4" />
-              </svg>
-            </span>
+            <img
+              src="ikonlar/ikon-192.png"
+              alt=""
+              width={36}
+              height={36}
+              className="rounded-[22%] shadow-md shadow-black/40 ring-1 ring-white/15"
+            />
             <span>
               <b className="block text-[15px] leading-tight text-white">Hesap Planım</b>
               <small className="text-[11px] text-slate-400">Muhasebe &amp; Bütçe</small>
@@ -229,7 +228,7 @@ export default function Sidebar({
           </div>
 
           <span className="hidden shrink-0 rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-slate-400 lg:inline-block">
-            🔒 %100 yerel · bu PC&apos;de
+            ☁ PC · Web senkron · Veriler bu PC&apos;de
           </span>
         </div>
 

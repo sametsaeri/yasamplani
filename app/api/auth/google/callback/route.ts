@@ -22,13 +22,13 @@ export async function GET(req: NextRequest) {
     let user = await prisma.user.findUnique({ where: { email: userInfo.email } });
 
     if (!user) {
-      // Şifre yok, googleId kaydet
+      // Google ile gelen kullanıcı: şifre yok (Google oturumu ile girer),
+      // güvenlik sorusu sonra tamamlanabilir.
       user = await prisma.user.create({
         data: {
-          email: userInfo.email,
+          email: String(userInfo.email).trim().toLocaleLowerCase("tr"),
           name: userInfo.name || userInfo.email.split("@")[0],
-          googleId: userInfo.email, // googleId olarak email kullanıyoruz
-          passwordHash: "", // Şifresiz - sadece Google
+          passwordHash: "",
         },
       });
       await prisma.userData.create({ data: { userId: user.id, data: {} } });
