@@ -1,6 +1,6 @@
 {
   "name": "hesap-planim",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "main": "elektron/main.js",
   "scripts": {
@@ -9,10 +9,10 @@
     "start": "next start",
     "postinstall": "prisma generate",
     "desktop:dev": "set ELECTRON_DEV=1&& electron .",
-    "desktop": "set NEXT_EXPORT=1&& next build && electron .",
-    "dist": "set NEXT_EXPORT=1&& next build && electron-builder --win nsis",
-    "dist:mac": "set NEXT_EXPORT=1&& next build && electron-builder --mac dmg",
-    "dist:linux": "set NEXT_EXPORT=1&& next build && electron-builder --linux AppImage",
+    "desktop": "set NEXT_EXPORT=1&& set NEXT_PUBLIC_API_BASE=https://yasamplanlama.vercel.app&& next build && electron .",
+    "dist": "set NEXT_EXPORT=1&& set NEXT_PUBLIC_API_BASE=https://yasamplanlama.vercel.app&& next build && electron-builder --win nsis",
+    "dist:mac": "set NEXT_EXPORT=1&& set NEXT_PUBLIC_API_BASE=https://yasamplanlama.vercel.app&& next build && electron-builder --mac dmg",
+    "dist:linux": "set NEXT_EXPORT=1&& set NEXT_PUBLIC_API_BASE=https://yasamplanlama.vercel.app&& next build && electron-builder --linux AppImage",
     "dist:web": "set NEXT_EXPORT=1&& next build"
   },
   "dependencies": {

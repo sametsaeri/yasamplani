@@ -7,7 +7,9 @@ import { cookies, headers } from "next/headers";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me-in-prod";
 const COOKIE = "hp_token";
-const MAX_AGE = 60 * 60 * 24 * 30; // 30 gün
+// Sliding session süresi (gün): her başarılı istekte yeniden başlar.
+const SESSION_GUN = Number(process.env.SESSION_GUN || 7);
+const MAX_AGE = 60 * 60 * 24 * SESSION_GUN;
 
 // Google OAuth config
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
@@ -25,7 +27,7 @@ export async function dogrulaParola(p: string, hash: string): Promise<boolean> {
 }
 
 export function tokenUret(payload: JwtPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "30d" });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: MAX_AGE });
 }
 
 export function tokenCoz(token: string): JwtPayload | null {

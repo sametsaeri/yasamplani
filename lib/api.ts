@@ -20,6 +20,8 @@ async function istek(yol: string, secenek?: RequestInit): Promise<any> {
   let veri: any = null;
   try { veri = await r.json(); } catch { /* */ }
   if (!r.ok) throw new Error(veri?.hata || `HTTP ${r.status}`);
+  // Sliding session: sunucu her yanırda taze token döner → sakla (masaüstü file:// çeyreği)
+  if (veri?.token) apiTokenAyarla(veri.token);
   return veri;
 }
 
