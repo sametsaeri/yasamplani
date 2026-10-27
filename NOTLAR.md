@@ -166,3 +166,12 @@ ediyor ve GET her zaman OBJE döndürüyor (eski string kayıtlar da dönüştü
 
 **Canlı test (27.10):** LOGIN 200 ACAO=null · OPTIONS 204 · ME 200 token · DATA obj+token ·
 izinsiz origin ACAO yok · yerel testler yeşil. Depo: master + main @ 9ac50ec. EXE: Setup 1.4.0.exe.
+
+## 10b) v1.4.1 — Oturum kapat bug'ı düzeltildi ✅
+**Belirti**: Oturumu kapat'a basınca hesaba tekrar giriliyordu.
+**Kök neden**: tamCikis() bulut çıkış POST'unu beklemeden /giris'e gidiyordu;
+/giris açılışındaki cloudMe() çerez hâlâ geçerliyken 200 alıp sliding token'ı
+localStorage'a geri yazıp kullanıcıyı /uygulama'ya atıyordu (yarış durumu).
+**Düzeltme**: tamCikis() await cloudCikis(); token ilk önce düşürülür; sliding
+token yalnız login/register veya mevcut token varken saklanır (geri canlanma yok).
+**Test**: yerel + canlı — çıkış → /giris, /uygulama'ya dönüş → yeniden /giris, token temiz.
