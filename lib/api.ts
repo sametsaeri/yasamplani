@@ -20,8 +20,13 @@ async function istek(yol: string, secenek?: RequestInit): Promise<any> {
   let veri: any = null;
   try { veri = await r.json(); } catch { /* */ }
   if (!r.ok) throw new Error(veri?.hata || `HTTP ${r.status}`);
-  // Sliding session: sunucu her yanırda taze token döner → sakla (masaüstü file:// çeyreği)
-  if (veri?.token) apiTokenAyarla(veri.token);
+  // Sliding session: sunucu her yanırda taze token döner → sakla. ANCAK
+  // yalnız oturum kurma uçlarında (login/register) VEYA zaten token varken;
+  // yoksa çıkış sonrası yarışan bir cloudMe 200'ü oturumu geri getirebilir.
+  if (veri?.token) {
+    const kurulumUcu = yol.includes("/auth/login") || yol.includes("/auth/register");
+    if (kurulumUcu || apiTokenAl()) apiTokenAyarla(veri.token);
+  }
   return veri;
 }
 
@@ -44,10 +49,13 @@ export async function cloudKayit(ad: string, eposta: string, parola: string, sor
   } catch (e: any) { return e.message || "Kayıt başarısız."; }
 }
 export async function cloudCikis() {
-  try { await istek("/api/auth/logout", { method: "POST" }); } catch { /* */ }
+  // ÖNCE token'ı düşür: çıkış iletisi gecikirse bile kimse eski token'la
+  // veri çekemez ve /giris'in cloudMe'i oturumu geri getiremez.
   apiTokenAyarla(null);
+  try { await istek("/api/auth/logout", { method: "POST" }); } catch { /* */ }
   // Sunucu çerezini de düşürmek için bir kez daha deniyoruz (credentials: include)
   try { await fetch(BASE + "/api/auth/logout", { method: "POST", credentials: "include" }); } catch { /* */ }
+  apiTokenAyarla(null);
 }
 
 /** "Şifremi unuttum" 1. adım: e-postaya kayıtlı güvenlik sorusunu getirir. */

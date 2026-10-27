@@ -475,11 +475,13 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
   // Tam çıkış: yerel oturum + kayıtlı parola + bulut oturumu (cookie & token)
   // hepsi temizlenir. Önceden yalnızca yerel depolar siliniyordu; bulut token'ı
   // duruyordu → F5 yapıldığında cloudMe() oturumu geri getiriyordu.
-  const tamCikis = () => {
+  const tamCikis = async () => {
     // Her şey: yerel oturum + hatırlanan parola + bulut token/çerezi + kilit durumu
     cikis();
     unut();
-    void cloudCikis();
+    // Bulut çekişi beklenmeden gidilirse /giris açılışındaki cloudMe çerez
+    // düşülmeden 200 alıp kullanıcıyı tekrar /uygulama'ya atıyordu (bug).
+    try { await cloudCikis(); } catch { /* yine de devam */ }
     try { sessionStorage.removeItem("hp-kilit"); } catch { /* */ }
     onCikis();
     // Giriş sayfasına geri dön — tekrar otomatik giriş gerçekleşmesin
@@ -505,7 +507,7 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
             setView={setView}
             kilitle={() => setKilitli(true)}
             senkron={senkron}
-            cikisYap={() => { if (confirm("Oturum kapatılsın mı?")) { tamCikis(); } }}
+            cikisYap={() => { if (confirm("Oturum kapatılsın mı?")) { void tamCikis(); } }}
           />
         }
       />
@@ -595,7 +597,7 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
           {kilitHata && <p className="text-sm text-red-400">{kilitHata}</p>}
           <button
             className="mt-1 text-xs text-slate-500 underline underline-offset-2 hover:text-slate-300"
-            onClick={() => { tamCikis(); }}
+            onClick={() => { void tamCikis(); }}
           >
             Şifremi unuttum → çıkış yapıp sıfırla
           </button>
