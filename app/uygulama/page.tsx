@@ -644,16 +644,9 @@ export default function Home() {
         }
       } catch { /* sessiz */ }
       // 2) Yerel mod fallback (offline / env eksik)
-      try {
-        const mevcut = JSON.parse(localStorage.getItem("hp-users") || "[]");
-        if (!Array.isArray(mevcut) || mevcut.length === 0) {
-          const r = await fetch("/masaustu-kullanicilar.json");
-          if (r.ok) {
-            const u = await r.json();
-            if (Array.isArray(u) && u.length > 0) localStorage.setItem("hp-users", JSON.stringify(u));
-          }
-        }
-      } catch { /* sessiz */ }
+      // NOT: Eskiden /masaustu-kullanicilar.json'dan hesap listesi herkese
+      // indiriliyordu — başkalarının kayıtları görünür oluyordu. Kaldırıldı:
+      // yerel mod yalnız bu cihazda oluşturulmuş hesapları kullanır.
       await kullanicilariYukle();
       if (!oturum()) {
         try { await otomatikGiris(); } catch { /* sessiz */ }

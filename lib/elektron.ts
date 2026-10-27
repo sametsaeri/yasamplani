@@ -5,8 +5,8 @@ type ElektronApi = {
   yedekYaz: (ad: string, icerik: string) => Promise<boolean>;
   yedekListe: () => Promise<{ ad: string; tarih: number; boyut: number }[]>;
   yedekOku: (ad: string) => Promise<string>;
-  veriYaz: (icerik: string) => Promise<boolean>;
-  veriOku: () => Promise<string | null>;
+  veriYaz: (icerik: string, slug?: string) => Promise<boolean>;
+  veriOku: (slug?: string) => Promise<string | null>;
   kullanicilarYaz: (icerik: string) => Promise<boolean>;
   kullanicilarOku: () => Promise<string | null>;
   pdfKaydet: (html: string, ad: string) => Promise<{ ok: boolean; yol?: string; iptal?: boolean; hata?: string }>;
@@ -45,20 +45,22 @@ export async function diskYedekOku(ad: string): Promise<string> {
   return window.elektron!.yedekOku(ad);
 }
 
-/** Dosya veritabanı: EXE'de veri her zaman diske de yazılır (tarayıcı deposu silinse bile geri gelir). */
-export async function dosyaVeriYaz(icerik: string): Promise<boolean> {
+/** Dosya veritabanı: EXE'de veri her zaman diske de yazılır (tarayıcı deposu
+ *  silinse bile geri gelir). slug verilirse veri o kullanıcının kendi dosyasına
+ *  yazılır → masaüstünde hesapların verileri birbirinden ayrık tutulur. */
+export async function dosyaVeriYaz(icerik: string, slug?: string): Promise<boolean> {
   if (!elektronVar()) return false;
   try {
-    return await window.elektron!.veriYaz(icerik);
+    return await window.elektron!.veriYaz(icerik, slug);
   } catch {
     return false;
   }
 }
 
-export async function dosyaVeriOku(): Promise<string | null> {
+export async function dosyaVeriOku(slug?: string): Promise<string | null> {
   if (!elektronVar()) return null;
   try {
-    return await window.elektron!.veriOku();
+    return await window.elektron!.veriOku(slug);
   } catch {
     return null;
   }

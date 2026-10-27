@@ -51,13 +51,24 @@ ipcMain.handle("yedek-oku", (_olay, ad) => {
 });
 
 // --- Dosya veritabanı (D2): veri her zaman diske yazılır ---
-function veriDosyasi() {
-  return path.join(app.getPath("userData"), "hesap-planim-veri.json");
+// Kullanıcı izolasyonu: her hesap KENDİ dosyasında tutulur (defterler/*).
+// Eski tek dosyada (hesap-planim-veri.json) verisi olan kullanıcı, İLK açılışında
+// dosyayı "sahiplenir" (calindi.json'a işlenir); sonrası gelen başka hesaplar
+// asla o veriye erişemez — boş defterle başlar.
+function veriDosyasi(slug?: string) {
+  if (!slug) return path.join(app.getPath("userData"), "hesap-planim-veri.json");
+  return path.join(app.getPath("userData"), "defterler", String(slug).replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 80) + ".json");
 }
 
-ipcMain.handle("veri-yaz", (_olay, icerik) => {
+function veriCalmaDosyasi() {
+  return path.join(app.getPath("userData"), "calindi.json");
+}
+
+ipcMain.handle("veri-yaz", (_olay, icerik, slug) => {
   try {
-    const hedef = veriDosyasi();
+    const temiz = String(slug || "").trim();
+    const hedef = veriDosyasi(temiz || undefined);
+    if (temiz) fs.mkdirSync(path.dirname(hedef), { recursive: true });
     const gecici = hedef + ".tmp";
     fs.writeFileSync(gecici, String(icerik || ""), "utf8");
     fs.renameSync(gecici, hedef); // atomik: yarı yazılmış dosya kalmaz
@@ -67,10 +78,25 @@ ipcMain.handle("veri-yaz", (_olay, icerik) => {
   }
 });
 
-ipcMain.handle("veri-oku", () => {
+ipcMain.handle("veri-oku", (_olay, slug) => {
   try {
-    const hedef = veriDosyasi();
+    const temizSlug = String(slug || "").trim();
+    const hedef = veriDosyasi(temizSlug || undefined);
     if (fs.existsSync(hedef)) return fs.readFileSync(hedef, "utf8");
+    if (!temizSlug) return null; // paylaşılan dosya yoksayılırsa boş
+    // Tek seferlik devir: eski tek dosyadaki veri, onu İLK sahiplenen
+    // kullanıcıya verilir; sonradan açılan diğer hesaplar asla göremez.
+    const paylasilan = veriDosyasi();
+    if (!fs.existsSync(paylasilan)) return null;
+    const eski = fs.readFileSync(paylasilan, "utf8");
+    let dolu = false;
+    try { const d = JSON.parse(eski); dolu = !!(d && Array.isArray(d.ledgers) && d.ledgers.length > 0); } catch { /* bozuk */ }
+    if (!dolu) return null;
+    let calinma = null;
+    try { calinma = JSON.parse(fs.readFileSync(veriCalmaDosyasi(), "utf8")); } catch { /* ux */ }
+    if (calinma && calinma.slug && calinma.slug !== temizSlug) return null; // başkası devralmış
+    try { fs.writeFileSync(veriCalmaDosyasi(), JSON.stringify({ slug: temizSlug, tarih: new Date().toISOString() }), "utf8"); } catch { /* ux */ }
+    return eski;
   } catch {
     /* bozuk dosya → null */
   }

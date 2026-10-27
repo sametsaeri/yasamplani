@@ -1,10 +1,10 @@
 # 📋 NOTLAR — 27 Ekim 2026 Gece Çalışması (Sabah Okuman İçin)
 
 ## 1) Derleme Hatasıyla Savaş: KÖK NEDEN BULUNDU ✅
-Sabah beri günlerce derlemeyi patlatan hata iki adımdan ibarratti:
-1. Yıllardan kalan gerçek sebep şuradaydı: `lib/auth-server.ts` içinde
+Sabah beri günlerce derlemeyi patlatan hata iki adımdan ibaret oldu:
+1. Gerçek sebep şuradaydı: `lib/auth-server.ts` içinde
    `import { cookies, headers } from "next/";` yazılmıştı (doğrusu **`next/headers`**).
-   `next/` (paketin kökü) import ed Next'in **sunucu bundler zincirini** (router-server →
+   `next/` (paketin kökü) import edince Next'in **sunucu bundler zincirini** (router-server →
    hot-reloader → webpack-config → blocks/css) derleme grafiğine çekiyordu;
    zincir sonu `require.resolve("next/font/google/target.css")`'in sorgusuz
    derlemesine → next-font-loader `JSON.parse("")` → "Unexpected end of JSON input".
@@ -17,7 +17,7 @@ Sonuç: `npm run build` ✅ derliyor; `npm run dist:web` ✅ statik export çık
 İki kusur vardı:
 - `cikis()` "hp-hatirla" (hatırlanan parola) kaydını silmiyordu → açılışta
   `otomatikGiris()` ile geri dönüştü.
-- Bulut token/çerez temizlenmiyor olabilirdi; `tamCikis` eksik run.
+- Bulut token/çerez temizlenmiyor olabilirdi; `tamCikis` eksik çalışıyordu.
 
 Artık: `tamCikis()` = `cikis()` + `unut()` (hp-hatirla + hp-kilit temizliği) +
 `cloudCikis()` (token + sunucu çerezi) + `/giris`'e yönlendirme.
@@ -27,17 +27,17 @@ Canlı testler bunu doğruladı (aşağıda).
 - `/` → **Ana Sayfa (landing)**: şık koyu tema, ızgara+ışıma arka plan,
   "Hakkında", "İndir", sağ üstte "Giriş yap", kart ölçülerinde tanıtım,
   3 adımda kur bölümü, footer.
-- `/giris` ve `/kayit` → **aynı sayfalarda ayrı ekranlar** (her biri kendi URL'i).
-- `/uygulama` → asıl panel (dashboard)-s.listFiles
+- `/giris` ve `/kayit` → **ayrı ekranlar** (her biri kendi URL'i).
+- `/uygulama` → asıl panel (dashboard).
 - `/indir` → indir + adım adım kurulum.
 - PWA start_url `/uygulama`; Electron `out/uygulama.html` yükler (dev'de localhost:3000/uygulama).
 
 ## 4) Kullanıcı/Şifre Yönetimi TAMAMEN VERİTABANINDA ✅
 - Kayıt: şifre + güvenlik cevabı **bcrypt** hash ile Postgres'e (Neon) yazılır.
-  E-posta artık küçük harf normallik gösteriyor (tr/küçük harf).
-- Giriş: veritabanından doğrulama + token; **hız sınırı** (e-posta başına 5 dk'dan
-  8 kullanıldı denemeden sonra kilitlenme) devrede.
-- "Şifremi unuttum": `/api/auth/reset-soru` (soru'yu getiren, cevabi asla göndermeyen)
+  E-posta artık küçük harfe normalize ediliyor.
+- Giriş: veritabanından doğrulama + token; **hız sınırı** (e-posta başına
+  5 dk'da en fazla 8 deneme; sonrası 429) devrede.
+- "Şifremi unuttum": `/api/auth/reset-soru` (soru döner, cevap ASLA göndermez)
   + `/api/auth/reset` (cevap hash'i veritabanında doğrulanır, parola güncellenir).
 - Kayıtta güvenlik sorusu+cevabı zorunlu; google callback route şema hatası düzeltildi.
 
@@ -52,7 +52,7 @@ Canlı testler bunu doğruladı (aşağıda).
 |---|---|
 | REGISTER (kayıt) | ✅ ok=True, token=True |
 | LOGIN eski parola | ✅ ok=True |
-| RESET-SORU | ✅ soru dündü |
+| RESET-SORU | ✅ soru döndü |
 | RESET yanlış cevap | ✅ 401 engellendi |
 | RESET doğru cevap | ✅ ok=True |
 | LOGIN yeni parola | ✅ ok=True |
@@ -87,19 +87,63 @@ Canlı testler bunu doğruladı (aşağıda).
 - Ayrıca `origin` (github.com/sametsaeri/WEB-.git) boş depoyu `master` ile doldurduk (yedek).
 - **Canlı doğrulama** (https://yasamplanlama.vercel.app/):
   - Yeni landing + `/giris` `/kayit` `/indir` `/uygulama` → hepsi 200 ✅
-  - Prod API: REGISTER ok/token ✅, LOGIN ok ✅ (Neon DB + bcrypt canıda)
-  - UI akış canıda: kayıt → /uygulama ✅; kayıtsız e-posta hatası ✅; çıkış → depo temiz ✅;
+  - Prod API: REGISTER ok/token ✅, LOGIN ok ✅ (Neon DB + bcrypt canı da çalışıyor)
+  - UI akışı canı da: kayıt → /uygulama ✅; kayıtsız e-posta hatası ✅; çıkış → depo temiz ✅;
     F5/`/uygulama` → `/giris`'e redirect, otomatik re-login YOK ✅
   - `/api/indir/exe` sunucuda EXE yok → 404, sayfa "sunucuda yok" rehber moduna düşüyor ✅
 - ⚠️ **Dikkat**: vercel.json'dan `GOOGLE_CLIENT_ID/SECRET` kaldırıldı; bunlar Vercel proje
-  ayarlarındaki Environment Variables'dan gelmeli. Google girişi canıda çalışmıyorsa
+  ayarlarındaki Environment Variables'dan gelmeli. Google girişi canı da çalışmıyorsa
   bu değişkenleri Vercel dashboard'dan ekle.
 
-## 8) Kalan / Sonraki Adımlar (bu gece durumu)
-- `npm run dist` ile yeni EXE paketi üret (kurulum/ klasörüne; İndir sayfası otomatik
-  sunacaktır). İstersen EXE'yi Vercel'e commit'lemeden ayrı paylaşım kanala koyarız.
-- Electron penceresinde manuel spot test (file:// akışı, sync).
-- "Şifremi unuttum" için e-posta ile doğrulama (SMTP) ilerisi — şu an güvenlik soru-cevabı.
+## 8) Öncesi: Exe üretimi ✅
+- `npm run dist` → `kurulum/Hesap Planım Setup 1.2.0.exe` (271 MB NSIS kurulumcu).
+- İndir sayfası EXE'yi sunucuya koyarsan otomatik verir; şu an yerelde kullanılabilir.
+
+## 9) ⚠️ VERİ İZOLASYONU Sızıntısı — KÖK NEDEN + DÜZELTME ✅
+**Hata**: yeni kayıt olan kullanıcı SENİN defterlerini (sametsarimuhasebe@gmail.com) görüyordu.
+
+**Kök nedenler (tamamı kapatıldı):**
+1. `public/masaustu-veri.json` — masaüstü verin (gerçek finans verin) herkese açık
+   şekilde sitede yayınlanıyordu; boş bir hesaba bu otomatik yükleniyordu
+   (store.ts içindeki içe aktarma bloğu). → Dosya KALDIRILDI, içe aktarma bloğu
+   kaldırıldı; `/masaustu-veri.json` artık 404.
+   ⚠️ Not: dosya canlı sitede bir süre erişilebilir durumdaydı; bilgiyi kontrol
+   etmek istersen eski yedekleri ve ayarlarına bak.
+2. `public/masaustu-kullanicilar.json` — kullanıcı listesi (e-posta + parola özeti)
+   herkese indirilebiliyordu; açılışta hp-users'a yükleniyordu. → Kaldırıldı (404 + kod).
+3. **Electron tek dosya** — masaüstünde TÜM hesaplar aynı `hesap-planim-veri.json`
+   dosyasını paylaşıyordu. → Her hesap kendi `defterler/<eposta>.json` dosyasında;
+   eski tek dosyada verisi olan ilk açan kullanıcı (sen) dosyayı tek seferlik
+   sahiplenir (`calindi.json` işareti) ve sonrasında açılan hesaplar boş defterle başlar.
+4. `legacyVeri()` — "hp-next-v1" genel anahtarındaki eski veri HERKESİ devralırdı.
+   → Artık yalnız hp-session e-postası ile "hp-next-v1:<eposta>" anahtarı birebir
+   eşleşirse devralınır (senin verin yalnız senin oturumunda gelir).
+5. hp-users parola sıfırlama hilesi (hatırlanan kullanıcının parolası bilinen
+   bir hash'e eşitleniyor, "123456"). → Kaldırıldı.
+
+**Ek düzeltme — bulut senkron "aslında hiç çalışmıyordu":**
+İstemci data'yı STRING olarak gönderip sunucu string kaydediyor; GET string
+dönüyordu ve istemci "bulut boş" sanıp tekrar yazıyordu → PC↔Web senkronun
+"buluttan al" kolu hiç çalışmıyordu. → `/api/data` artık her iki biçimi kabul
+ediyor ve GET her zaman OBJE döndürüyor (eski string kayıtlar da dönüştürülür).
+
+**Testler (hepsi geçti):**
+- Yeni hesap → defterler yalnız varsayılanlar (3 şablon, 0 işlem)
+- A'nın bulut verisine AYIRICI defter yazıldı → B token'ı ile GET → B boş gördü
+- Legacy "SIZINTI" defteri genel anahtarda iken B girişi → sızma YOK
+- `/masaustu-veri.json` ve `/masaustu-kullanicilar.json` → HTTP 404
+- PUT(string) → GET(obj) → dönüştürüyor
+
+**Senin için önemli:**
+- Bu geceden önce kayıt olmuş kullanıcılar arasında verileri senin defterinden
+  kopyalamış olanlar olabilir (eski hatalı davranış). Yeni kayıtlar tamamen temizdir.
+- EXE paketi 1.3 sürümüyle YENİDEN üretilecek (Electron izolasyon + preload düzeltmeleriyle).
+
+**Kalan:**
+- Google girişi için Vercel Environment Variables'a GOOGLE_CLIENT_ID/SECRET ekle.
+- Electron içindeki bulut senkronu (file:// üzerinde fetch("/api/...") çalışmaz):
+  masaüstü paketinde NEXT_PUBLIC_API_BASE yazıp derlemek gerekebilir — ayrı iş maddesi.
+- "Şifremi unuttum" için e-posta ile doğrulama (SMTP) ilerisi — şu an güvenlik sorusu.
 
 ## İlgili dosyalar (gecenin değiştirdikleri)
 - `lib/auth-server.ts`, `lib/auth.ts` (+unut()), `lib/api.ts` (+cloud soru/reset), `lib/navigasyon.ts` (yeni)
@@ -107,5 +151,5 @@ Canlı testler bunu doğruladı (aşağıda).
   `components/Indir.tsx` (yeni, otomatik indirme), `components/PwaKayit.tsx` (tip hata düzeltmesi)
 - `app/page.tsx` (landing), `app/giris`, `app/kayit`, `app/uygulama/page.tsx` (dashboard taşındı),
   `app/api/auth/reset`, `app/api/auth/reset-soru` (yeni), `app/api/auth/login|register` (normalizasyon+hız limiti),
-  `app/api/auth/google/callback` (şema hatası), `app/api/indir/exe` (export uyumlu)
-- `next.config.mjs`, `public/manifest.webmanifest` (start_url), `elektron/main.js` (uygulama.html)
+  `app/api/data` (string/obj uyumu), `app/api/auth/google/callback` (şema hatası), `app/api/indir/exe` (export uyumlu)
+- `next.config.mjs`, `public/manifest.webmanifest` (start_url), `elektron/main.js` (uygulama.html + per-user dosyalar)

@@ -316,6 +316,15 @@ function tazele(d: Db): Db {
   return { ...base, ...d, ayarlar: { ...base.ayarlar, ...(d.ayarlar || {}) } };
 }
 
+/** Anahtar → güvenli dosya adı. ":" @ vb. karakterler Windows'ta yasak olduğundan
+ *  harfsayı-._ dışındaki karakterler "-" olur; çakışmayı önlemek için anahtar
+ *  içeriğinden türetilmiş kısa öz eklenir. ("hp-next-v1:a@b.com" → benzersiz ad) */
+function kisaAd(anahtar: string): string {
+  let oz = 0;
+  for (let i = 0; i < anahtar.length; i++) oz = (oz * 31 + anahtar.charCodeAt(i)) >>> 0;
+  return anahtar.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 48) + "-" + oz.toString(36);
+}
+
 function load(anahtar: string): { db: Db; not: string | null } {
   const taze = (d: Db) => tazele(d);
   let bozukMu = false;
@@ -343,10 +352,19 @@ function load(anahtar: string): { db: Db; not: string | null } {
   const yedek = snapshotOku(anahtar);
   if (yedek) return { db: taze(yedek.veri), not: `Veri okunamadı → otomatik yedekten geri yüklendi (${yedek.tarih}). Bozuk kopya "hp-bozuk" anahtarında saklandı, hiçbir şey yapman gerekmedi.` };
   if (anahtar !== KEY) {
-    const eski = legacyVeri();
-    if (eski) {
-      const base = seed();
-      return { db: { ...base, ...eski, ayarlar: { ...base.ayarlar } }, not: null };
+    // Geçmiş göçü YALNIZCA aynı oturumda açan kullanıcıya: anahtar
+    // "hp-next-v1:<eposta>" şeklindedir ve eski tek-anahtar verisi (hp-next-v1)
+    // sadece e-posta birebir eşleşiyorsa devralınır. Böylece yeni bir kullanıcı
+    // asla başkasının (eski tek kullanıcının) defterini göremez.
+    const eposta = anahtar.replace(/^hp-next-v1:/, "");
+    let oturumE = "";
+    try { oturumE = (localStorage.getItem("hp-session") || "").trim().toLowerCase(); } catch { /* yok say */ }
+    if (eposta && oturumE === eposta.trim().toLowerCase()) {
+      const eski = legacyVeri();
+      if (eski) {
+        const base = seed();
+        return { db: { ...base, ...eski, ayarlar: { ...base.ayarlar } }, not: null };
+      }
     }
   }
   if (bozukMu) return { db: seed(), not: "Veri okunamadı ve yedek bulunamadı → boş başlandı. Bozuk kopya tarayıcıda saklandı (Rapor → Kurtarma bölümünden indirebilirsin)." };
@@ -410,37 +428,24 @@ export function useDb(anahtar: string = KEY) {
       gecerli = false;
     }
     if (gecerli) return;
-    // 1) Masaüstü (Electron) dosya veritabanı
+    // 1) Masaüstü (Electron) dosya veritabanı — kullanıcı bazlı dosyada tavsiye edilir.
     if (window.elektron) {
       window.elektron
-        .veriOku()
+        .veriOku(anahtar)
         .then((s) => {
           if (!s) return;
-          const d = JSON.parse(s);
-          if (d && Array.isArray(d.ledgers) && d.ledgers.length > 0) setDbState(tazele(d));
+          try {
+            const d = JSON.parse(s);
+            if (d && Array.isArray(d.ledgers) && d.ledgers.length > 0) setDbState(tazele(d));
+          } catch { /* bozuk → boş başla */ }
         })
         .catch(() => {});
       return;
     }
-    // 2) Web: ilk açılışta masaüstü yedeği otomatik içe aktar (telefon/PC'de
-    //    veri boşsa /masaustu-veri.json'dan doldurulur — veri kaybı olmaz).
-    //    Aynı anda parola da geçici "123456" olarak sıfırlanır (kullanıcı
-    //    parolasını unutmuş olabilir; güvenlik sorusuyla sonra değiştirebilir).
-    fetch("/masaustu-veri.json")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d && Array.isArray(d.ledgers) && d.ledgers.length > 0) setDbState(tazele(d));
-        try {
-          const eposta = anahtar.replace(/^hp-next-v1:/, "");
-          const users = JSON.parse(localStorage.getItem("hp-users") || "[]");
-          const u = Array.isArray(users) ? users.find((x: any) => x.eposta === eposta) : null;
-          if (u) {
-            u.parola = "5cdbb46538576e0534c6076d1de3c306d2f909498187269df66984e3b00d4e50";
-            localStorage.setItem("hp-users", JSON.stringify(users));
-          }
-        } catch { /* yok say */ }
-      })
-      .catch(() => {});
+    // 2) Web: BOŞ hesaba başka kimsenin verisi ASLA otomatik yüklenmez.
+    //    (Eskiden /masaustu-veri.json her yeni hesaba ilk kullanıcının defterlerini
+    //    dolduruyordu — veri izolasyonu hatası. Kaldırıldı; veriler yalnız bulut
+    //    senkronu ile kendi hesaplarına gelir.)
   }, [anahtar]);
 
   const sunucuDok = (veri: unknown): veri is Db => {
@@ -526,8 +531,10 @@ export function useDb(anahtar: string = KEY) {
       cloudDataKaydet(s)
         .then((ok) => ok && setSenkron({ zaman: saatDamgasi(), durum: "tamam" }))
         .catch(() => {});
-      // D2: masaüstünde veri diske de yazılır (tarayıcı deposu silinse bile kaybolmaz)
-      window.elektron?.veriYaz(s).catch(() => {});
+      // D2: masaüstünde veri diske de yazılır (tarayıcı deposu silinse bile kaybolmaz).
+      // Kullanıcı bazlı dosyaya yazılır → masaüstünde hesaplar birbirinin
+      // defterini göremez (aynı andaki tek dosya paylaşımı hatası giderildi).
+      window.elektron?.veriYaz(s, anahtar).catch(() => {});
       // yazma kilidini hemen sonra aç (periyodik bulut kontrolünü engellememek için)
       window.setTimeout(() => { yaziyorRef.current = false; }, 1200);
       return s;
@@ -539,7 +546,8 @@ export function useDb(anahtar: string = KEY) {
       window.clearTimeout(id);
       const s = yaz();
       try {
-        window.elektron?.yedekYaz("z-kapanis-son.json", s).catch(() => {});
+        // kapanış yedeği kullanıcı bazlı ad taşır (farklı hesaplar üstüne yazmaz)
+        window.elektron?.yedekYaz(`z-kapanis-son-${kisaAd(anahtar)}.json`, s).catch(() => {});
       } catch {
         /* masaüstü değilse yoksay */
       }
