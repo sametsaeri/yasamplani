@@ -153,3 +153,16 @@ ediyor ve GET her zaman OBJE döndürüyor (eski string kayıtlar da dönüştü
   `app/api/auth/reset`, `app/api/auth/reset-soru` (yeni), `app/api/auth/login|register` (normalizasyon+hız limiti),
   `app/api/data` (string/obj uyumu), `app/api/auth/google/callback` (şema hatası), `app/api/indir/exe` (export uyumlu)
 - `next.config.mjs`, `public/manifest.webmanifest` (start_url), `elektron/main.js` (uygulama.html + per-user dosyalar)
+
+## 10) v1.4.0 — Masaüstü bulut girişi + Sliding session (27.10) ✅
+1. **EXE'de web hesabıyla giriş**: lib/cors.ts yeni (Origin "null"=file://, vercel+preview, localhost
+   izinli; izinsiz origin'e başlık gelmez). 7 API rotasına CORS+OPTIONS eklendi. Desktop/dist
+   scriptleri NEXT_PUBLIC_API_BASE=https://yasamplanlama.vercel.app gömülü (out chunks'ta doğrulandı).
+   → EXE 1.4.0 artık web hesabınla giriş yapıyor, yeniden kayıt istemiyor.
+2. **Sliding session (7 gün)**: MAX_AGE + JWT expiresIn 30g→7g (SESSION_GUN env ile ayarlanabilir).
+   /api/auth/me ve /api/data GET her yanında taze token üretir (çerez + gövde); istemci (lib/api.ts)
+   her yanıtta token'ı günceller. → Kullanım sürdükçe 7 gün uzar; hiç kullanmazsan sessizce biter,
+   veriler bulutta güvende, /giris'e düşersin.
+
+**Canlı test (27.10):** LOGIN 200 ACAO=null · OPTIONS 204 · ME 200 token · DATA obj+token ·
+izinsiz origin ACAO yok · yerel testler yeşil. Depo: master + main @ 9ac50ec. EXE: Setup 1.4.0.exe.
