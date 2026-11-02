@@ -1562,6 +1562,7 @@ export default function Finans({ db, setDb, go }: Props) {
         kapat={() => setFaizHesapId(null)}
         baslik={`💰 Bugünkü Değer${faizHesap ? " — " + faizHesap.name : ""}`}
         genis
+        sag={<Btn kucuk ghost onClick={() => setFaizHesapId(null)} aria-label="Kapat">✕ Kapat</Btn>}
       >
         {faizHesap && <FaizPanel db={db} hesap={faizHesap} />}
       </Modal>
