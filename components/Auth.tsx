@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Eye, EyeOff, KeyRound, LogIn, UserPlus, Wallet } from "lucide-react";
-import { SORULAR, epostaGecerli, giris, hatirlanan, kayitOl, parolaHatirla, sifirla, sifirlamaSorusu, unut } from "../lib/auth";
-import { cloudGiris, cloudKayit, cloudMe, cloudSifirla, cloudSoruyuGetir } from "../lib/api";
+import { SORULAR, cikis, epostaGecerli, giris, hatirlanan, kayitOl, parolaHatirla, sifirla, sifirlamaSorusu, unut } from "../lib/auth";
+import { cloudGiris, cloudKayit, cloudMe, cloudSifirla, cloudSoruyuGetir, cloudCikis } from "../lib/api";
 import { gitSayfasi } from "../lib/navigasyon";
 
 /** Parola gücü puanı (0-4): uzunluk + çeşitlilik kalemleri üzerinden. */
@@ -40,6 +40,8 @@ export default function AuthScreen({ baslangic = "giris" }: { baslangic?: "giris
   const [parolaKaydet, setParolaKaydet] = useState(() => !!hatirlanan().parola);
   const [parolaGorunur, setParolaGorunur] = useState(false);
   const [parola2Gorunur, setParola2Gorunur] = useState(false);
+  // Mevcut bulut oturumu (varsa banner gösterilir; otomatik yönlendirme yok)
+  const [oturumVar, setOturumVar] = useState<{ email: string; ad: string } | null>(null);
 
   // Sayfa açılış animasyonu için
   const [hazir, setHazir] = useState(false);
@@ -48,12 +50,22 @@ export default function AuthScreen({ baslangic = "giris" }: { baslangic?: "giris
     requestAnimationFrame(() => requestAnimationFrame(() => setHazir(true)));
   }, []);
 
-  // Zaten oturum açık olanını giriş sayfasında tutmayalım → uygulamaya geçir
+  // Zaten oturum açıkken otomatik yönlendirme yapma; banner göster ve giriş formunu kullanıma bırak
   useEffect(() => {
     void (async () => {
-      try { const me = await cloudMe(); if (me?.email) gitSayfasi("/uygulama"); } catch { /* yok say */ }
+      try {
+        const me = await cloudMe();
+        if (me?.email) setOturumVar({ email: me.email, ad: me.ad || me.email });
+      } catch { /* yok say */ }
     })();
   }, []);
+
+  const oturumCikis = async () => {
+    try { await cloudCikis(); } catch { /* */ }
+    try { cikis(); } catch { /* */ }
+    try { unut(); } catch { /* */ }
+    setOturumVar(null);
+  };
 
   const guc = useMemo(() => parolaGucu(parola), [parola]);
   const guc2 = useMemo(() => parolaGucu(yeni), [yeni]);
@@ -195,6 +207,32 @@ export default function AuthScreen({ baslangic = "giris" }: { baslangic?: "giris
               <UserPlus size={15} /> Kayıt Ol
             </button>
           </div>
+
+          {oturumVar && (
+            <div className="mb-4 rounded-xl border border-indigo-400/30 bg-indigo-500/10 px-3 py-2 text-[13px] text-indigo-200">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  <b>Oturum açık:</b> {oturumVar.ad} ({oturumVar.email})
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => gitSayfasi("/uygulama")}
+                    className="rounded-lg bg-indigo-500 px-2 py-1 text-[12px] font-semibold text-white hover:bg-indigo-400"
+                  >
+                    Uygulamaya git
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { void oturumCikis(); }}
+                    className="rounded-lg bg-white/10 px-2 py-1 text-[12px] font-semibold text-indigo-200 hover:bg-white/20"
+                  >
+                    Çıkış yap
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {hata && (
             <div className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-[13px] text-red-300">

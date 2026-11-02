@@ -519,6 +519,7 @@ export function RaporView({ db, setDb, replaceAll, anahtar }: Props & { anahtar:
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {hesapList.map((a) => (
+                        <div className="flex items-center gap-1">
                         <button
                           key={a.id}
                           onClick={() =>
@@ -538,6 +539,14 @@ export function RaporView({ db, setDb, replaceAll, anahtar }: Props & { anahtar:
                           <span className="max-w-[150px] truncate">{a.name}</span>
                           {a.paneldeGizle && <span title="Genel Bakış'ta gizli" className="text-[10px]">👤</span>}
                         </button>
+                          <button
+                            onClick={() => { if (!confirm(a.name + " hesabi ve bagli islemler silinsin mi?")) return; setDb((prev) => ({ ...prev, accounts: prev.accounts.filter((x) => x.id !== a.id), transactions: prev.transactions.filter((t) => t.account_id !== a.id && t.to_account_id !== a.id) })); }}
+                            title="Hesabi sil"
+                            className="flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2 py-1 text-[11px] font-medium text-red-600 transition hover:bg-red-50"
+                          >
+                            Sil
+                          </button>
+                        </div>
                       ))}
                     </div>
                     {gizliHesapVar && (

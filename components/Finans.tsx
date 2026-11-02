@@ -1246,6 +1246,9 @@ export default function Finans({ db, setDb, go }: Props) {
                     <Btn kucuk ghost onClick={() => hesapGizle(h.id)} title={h.gizli ? "Hesabı göster" : "Hesabı gizle (listeden kaldır, veriler durur)"}>
                       {h.gizli ? "👁 Göster" : "🙈 Gizle"}
                     </Btn>
+                     <Btn kucuk ghost tehlike onClick={() => hesapSil(h.id)} title="Hesabi ve bagli islemleri sil">
+                       Sil
+                     </Btn>
                   </div>
                 </div>
               );

@@ -12,7 +12,7 @@ import type { Db } from "../../lib/store";
 import { useDb } from "../../lib/store";
 import { ayToplam, defterOzet } from "../../lib/finance";
 import { buAy, bugun, para, trh } from "../../lib/format";
-import { cikis, giris, kullaniciAd, kullanicilariYukle, otomatikGiris, oturum, unut, veriAnahtari } from "../../lib/auth";
+import { cikis, giris, hatirlanan, kullaniciAd, kullanicilariYukle, otomatikGiris, oturum, unut, veriAnahtari } from "../../lib/auth";
 import { cloudMe, cloudGiris, cloudCikis, apiTokenAl } from "../../lib/api";
 import { otoYedekle } from "../../lib/yedek";
 import { diskYedekYaz } from "../../lib/elektron";
@@ -416,10 +416,21 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
   }, [db.ayarlar.kilitDakika]);
 
   const kilidiAc = async () => {
-    const hata = await giris(eposta, kilitParola);
+    const ac = () => {
+      setKilitli(false); setKilitParola(""); setKilitHata("");
+      sonHareketRef.current = Date.now();
+    };
+    // 1) Hatirlanan parola ile yerel dogrulama (cevrimdisi calisir)
+    const h = hatirlanan();
+    if (h.eposta && h.parola && h.eposta.trim().toLowerCase() === eposta.trim().toLowerCase() && kilitParola === h.parola) {
+      ac();
+      return;
+    }
+    // 2) Bulut girisi dene; basarisizsa yerel mod.
+    let hata = await cloudGiris(eposta, kilitParola);
+    if (hata) hata = await giris(eposta, kilitParola);
     if (hata) return setKilitHata(hata);
-    setKilitli(false); setKilitParola(""); setKilitHata("");
-    sonHareketRef.current = Date.now();
+    ac();
   };
 
   useEffect(() => {
