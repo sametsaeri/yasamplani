@@ -10,6 +10,7 @@ import { bakiyeler, defterOzet, donemOzeti, taksitTarihleri } from "../lib/finan
 import { parayaCevir } from "../lib/para";
 import { indir, islemCsv } from "../lib/csv";
 import { Alan, Baslik, Bos, Btn, Card, Cubuk, DuzenleBtn, Gizli, HesapIkon, KategoriIkon, Modal, ParaGirisi, PilGosterge, SilBtn, Stat, inp } from "./ui";
+import { FaizPanel } from "./Faiz";
 
 type Props = { db: Db; setDb: (u: (d: Db) => Db) => void; go?: (v: View) => void };
 type TxForm = {
@@ -523,8 +524,14 @@ export default function Finans({ db, setDb, go }: Props) {
   const [hBeklenen, setHBeklenen] = useState("");
   const [hVade, setHVade] = useState("");
   const [hGizle, setHGizle] = useState(false);
+  /** Cari hesapta "vadeli alacak bulunur" → ticari faiz paneli açılır */
+  const [hVadeli, setHVadeli] = useState(false);
 
   const [inceleId, setInceleId] = useState<string | null>(null);
+  /** Hesap kartındaki "Bugünkü değer" butonundan açılan ticari faiz paneli */
+  const [faizHesapId, setFaizHesapId] = useState<string | null>(null);
+  /** Ticari faiz panelinin açıldığı cari hesap */
+  const faizHesap = faizHesapId ? db.accounts.find((h) => h.id === faizHesapId) ?? null : null;
   /** ⋮ menüsünden açılan hesap yönetim penceresi */
   const [yonetHesapId, setYonetHesapId] = useState<string | null>(null);
   /** Defter başındaki ⋮ menüsü: ekranda hangi bölümler görünecek */
@@ -661,6 +668,7 @@ export default function Finans({ db, setDb, go }: Props) {
       setHBeklenen(h.beklenen ? String(h.beklenen) : "");
       setHVade(h.vadeGun ? String(h.vadeGun) : "");
       setHGizle(!!h.paneldeGizle);
+      setHVadeli(!!h.vadeliAlacak);
     } else {
       setDuzHesap(null);
       setHAd("");
@@ -671,6 +679,7 @@ export default function Finans({ db, setDb, go }: Props) {
       setHBeklenen("");
       setHVade("");
       setHGizle(false);
+      setHVadeli(false);
     }
     setHesapModal(true);
   };
@@ -685,7 +694,12 @@ export default function Finans({ db, setDb, go }: Props) {
     const vadeGun = hTip === "credit_card" || hTip === "bank_card"
       ? 0
       : Math.min(31, Math.max(0, parseInt(hVade, 10) || 0));
-    const ortak = { name: ad, type: hTip, open: parayaCevir(hAcilis), limit: parayaCevir(hLimit), ekstre, beklenen: parayaCevir(hBeklenen), vadeGun, paneldeGizle: hGizle };
+    const ortak = {
+      name: ad, type: hTip, open: parayaCevir(hAcilis), limit: parayaCevir(hLimit),
+      ekstre, beklenen: parayaCevir(hBeklenen), vadeGun, paneldeGizle: hGizle,
+      // Yalnızca cari hesapta "vadeli alacak" anlamlı; diğer tiplerde temizlenir
+      vadeliAlacak: hTip === "current" ? hVadeli : false
+    };
     if (duzHesap) {
       setDb((d) => ({
         ...d,
@@ -1210,7 +1224,14 @@ export default function Finans({ db, setDb, go }: Props) {
                         {h.gizli && <span title="Gizli hesap — listede gizli">🙈</span>}
                         {h.paneldeGizle && <span title="Paneleden gizli">👤</span>}
                       </div>
-                      <div className="text-xs text-slate-500">{HESAP_TIP_AD[h.type]}</div>
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                        {HESAP_TIP_AD[h.type]}
+                        {h.type === "current" && h.vadeliAlacak && (
+                          <span title="Vadeli alacak bulunur — ticari faiz hesaplanır" className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                            ⏳ Vadeli
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {/* ⋮ Hesap yönetimi: detay, kontrol, mutabakat, gizle, sil */}
                     <button
@@ -1243,6 +1264,11 @@ export default function Finans({ db, setDb, go }: Props) {
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Btn kucuk ghost onClick={() => setInceleId(h.id)}>İncele →</Btn>
                     <DuzenleBtn onClick={() => hesapAc(h.id)} />
+                    {h.type === "current" && h.vadeliAlacak && (
+                      <Btn kucuk onClick={() => setFaizHesapId(h.id)} title="Ticari faiz ile bugünkü değeri hesapla">
+                        💰 Bugünkü değer
+                      </Btn>
+                    )}
                     <Btn kucuk ghost onClick={() => hesapGizle(h.id)} title={h.gizli ? "Hesabı göster" : "Hesabı gizle (listeden kaldır, veriler durur)"}>
                       {h.gizli ? "👁 Göster" : "🙈 Gizle"}
                     </Btn>
@@ -1516,12 +1542,28 @@ export default function Finans({ db, setDb, go }: Props) {
             </Alan>
           )}
           <Alan etiket="Beklenen bakiye — banka/ekstreye göre (₺)"><input className={inp} value={hBeklenen} onChange={(e) => setHBeklenen(e.target.value)} placeholder="Boş bırakılabilir" /></Alan>
+          {hTip === "current" && (
+            <label className="col-span-full flex cursor-pointer items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] text-slate-700 hover:bg-amber-100">
+              <input type="checkbox" checked={hVadeli} onChange={(e) => setHVadeli(e.target.checked)} />
+              ⏳ <span><b>Vadeli alacak bulunur</b> — Bu cari için ticari faiz hesaplanır; kartta “Bugünkü değer” paneli açılır (yıllık/aylık/günlük oran girilebilir)</span>
+            </label>
+          )}
           <label className="col-span-full flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[13px] text-slate-700 hover:bg-slate-100">
             <input type="checkbox" checked={hGizle} onChange={(e) => setHGizle(e.target.checked)} />
             🙈 <span><b>Paneleden gizle</b> — Genel Bakış'ta görünmesin (Finans bölümünde ve verilerinde durur)</span>
           </label>
         </div>
         <div className="mt-4 flex justify-end gap-2"><Btn ghost onClick={() => setHesapModal(false)}>Vazgeç</Btn><Btn onClick={hesapKaydet}>Kaydet</Btn></div>
+      </Modal>
+
+      {/* Ticari faiz: cari kartındaki "Bugünkü değer" butonu */}
+      <Modal
+        acik={!!faizHesapId}
+        kapat={() => setFaizHesapId(null)}
+        baslik={`💰 Bugünkü Değer${faizHesap ? " — " + faizHesap.name : ""}`}
+        genis
+      >
+        {faizHesap && <FaizPanel db={db} hesap={faizHesap} />}
       </Modal>
 
 
@@ -1964,10 +2006,20 @@ function HesapDetay({ db, setDb, hesap, islemAc, txDuzenle, kapat, yonetHesapAc 
           <span>Ekstre: <b>{hesap.ekstre ? hesap.ekstre + ". gün" : "-"}</b></span>
           <span>Vade: <b>{hesap.vadeFark ? hesap.vadeFark + " gün" : "-"}</b></span>
           {hesap.limit ? <span>Limit: <b>{para(hesap.limit)}</b></span> : null}
+          {hesap.vadeliAlacak ? <span className="font-semibold text-amber-700">⏳ Vadeli alacak: <b>Evet</b></span> : null}
           {hesap.sonKontrolTarih ? <span>Son kontrol: <b>{trh(hesap.sonKontrolTarih)}</b></span> : null}
           {hesap.mutabakatTarih ? <span>Son mutabakat: <b>{trh(hesap.mutabakatTarih)}</b></span> : null}
         </div>
       </Card>
+      )}
+      {/* Ticari faiz: "Vadeli alacak bulunur" işaretli cari hesaplarda */}
+      {hesap.type === "current" && hesap.vadeliAlacak && (
+        <Card className="mb-3">
+          <Baslik sag={<span className="text-xs font-normal text-slate-400">Kayıt seç veya tutar yaz → tarih gir</span>}>
+            ⏳ Ticari Faiz — Bugünkü Değer
+          </Baslik>
+          <FaizPanel db={db} hesap={hesap} />
+        </Card>
       )}
       {hesap.type === "credit_card" && hesap.limit ? (
         <div className="mb-3 flex flex-wrap items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4">

@@ -37,6 +37,8 @@ export type Account = {
   mutabakatTarih?: string;
   /** Mutabakatta eşleşen bakiye */
   mutabakatBakiye?: number;
+  /** Cari hesapta "vadeli alacak bulunur" → ticari faiz / bugünkü değer paneli açılır */
+  vadeliAlacak?: boolean;
 };
 export type TxType = "income" | "expense" | "transfer";
 export type DocType = "yok" | "cek" | "fatura";
