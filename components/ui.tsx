@@ -413,7 +413,7 @@ export function KullaniciPaneli({
       {acik && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setAcik(false)} />
-          <div className="absolute right-0 top-full z-50 mt-2 max-h-[calc(100vh-140px)] w-[288px] overflow-auto rounded-2xl border border-slate-200 bg-white text-left text-slate-900 shadow-xl">
+          <div className="absolute left-0 top-full z-50 mt-2 max-h-[calc(100vh-140px)] w-[288px] overflow-auto rounded-2xl border border-slate-200 bg-white text-left text-slate-900 shadow-xl">
             <div className="sticky top-0 z-10 flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-3 py-3">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-900 text-sm font-bold text-white">{basHarf}</span>
               <div className="min-w-0">
