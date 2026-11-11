@@ -571,7 +571,7 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
           </div>
         )}
         <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800 no-print">
-          ✅ <b>{kullaniciAd(eposta)}</b>, verilerin bu bilgisayarda saklanıyor — başka kimse göremez.
+          ✅ <b>{kullaniciAd(eposta)}</b>, verilerin şifreli olarak sunucuda saklanıyor — yalnızca senin hesabın erişebilir.
         </div>
         <div className="mt-3 anim-giris" key={view}>
           {view === "panel" && <Panel db={db} go={setView} setDb={setDb} />}
