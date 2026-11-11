@@ -12,8 +12,8 @@ import type { Db } from "../../lib/store";
 import { useDb } from "../../lib/store";
 import { ayToplam, defterOzet } from "../../lib/finance";
 import { buAy, bugun, para, trh } from "../../lib/format";
-import { cikis, giris, hatirlanan, kullaniciAd, kullanicilariYukle, otomatikGiris, oturum, unut, veriAnahtari } from "../../lib/auth";
-import { cloudMe, cloudGiris, cloudCikis, apiTokenAl } from "../../lib/api";
+import { cikis, giris, hatirlanan, kullaniciAd, kullanicilariYukle, otomatikGiris, oturum, parolaHatirla, unut, veriAnahtari } from "../../lib/auth";
+import { cloudMe, cloudGiris, cloudCikis, girisHatasiSec, apiTokenAl } from "../../lib/api";
 import { otoYedekle } from "../../lib/yedek";
 import { diskYedekYaz } from "../../lib/elektron";
 import { Btn, Card, KullaniciPaneli, Stat, yakinlastirmaBaslat } from "../../components/ui";
@@ -422,15 +422,25 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
     };
     // 1) Hatirlanan parola ile yerel dogrulama (cevrimdisi calisir)
     const h = hatirlanan();
-    if (h.eposta && h.parola && h.eposta.trim().toLowerCase() === eposta.trim().toLowerCase() && kilitParola === h.parola) {
+    const hatirlananBu = !!h.eposta && h.eposta.trim().toLowerCase() === eposta.trim().toLowerCase();
+    if (hatirlananBu && h.parola && kilitParola === h.parola) {
       ac();
       return;
     }
-    // 2) Bulut girisi dene; basarisizsa yerel mod.
-    let hata = await cloudGiris(eposta, kilitParola);
-    if (hata) hata = await giris(eposta, kilitParola);
-    if (hata) return setKilitHata(hata);
-    ac();
+    // 2) Bulut girişi; başarısızsa yerel mod. Hata metni asla yerel
+    //    "kayıtlı değil" ile ezilmesin (oturum açıkken yanıltıcıdır).
+    const bulutHata = await cloudGiris(eposta, kilitParola);
+    if (!bulutHata) {
+      // Şifre bulutta doğrulandı → hatırlanan parolayı tazele (varsa).
+      if (hatirlananBu && h.parola !== kilitParola) parolaHatirla(eposta, kilitParola);
+      ac();
+      return;
+    }
+    // beniHatirla: bu e-posta için hatırlanan kayıt varsa koru/yenile,
+    // yoksa silme (eski bug: her zaman false → hp-hatirla siliniyordu).
+    const yerelHata = await giris(eposta, kilitParola, hatirlananBu);
+    if (!yerelHata) { ac(); return; }
+    setKilitHata(girisHatasiSec(bulutHata, yerelHata));
   };
 
   useEffect(() => {

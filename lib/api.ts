@@ -81,3 +81,26 @@ export async function cloudDataKaydet(data: any): Promise<boolean> {
   try { await istek("/api/data", { method: "PUT", body: JSON.stringify({ data }) }); return true; }
   catch { return false; }
 }
+
+// --- Giriş / kilit hata önceliği -------------------------------------------------
+// Bulut + yerel sıralı giriş denemesinden sonra gösterilecek hata metni.
+// ÖNCEKİ HATA: yerel "Bu e-posta kayıtlı değil" mesajı, bulutun "Parola hatalı" /
+// hız sınırı cevabını ezmesin diye cloud kullanıcısı "kayıtlı değil" görüyordu.
+// Kurallar:
+//  1) İstek sunucuya ulaşamadı (ağ hatası) → yerel sonuç öne çıkar; o da hesabı
+//     bilmiyorsa dürüst bir bağlantı mesajı döner ("kayıtlı değil" YALAN olur).
+//  2) Bulut "e-posta kayıtlı değil" (404) dedi → hesap yalnız yerelde olabilir
+//     → yerel sonuç esastır (parola hatalı veya gerçekten kayıtlı değil).
+//  3) Bulut kesin bir cevap verdi (401/429/5xx...) → onun mesajı esastır.
+function agHatasiMi(m: string): boolean {
+  return /failed to fetch|fetch failed|networkerror|network request failed|load failed|econnrefused|enotfound|etimedout|econnreset|socket hang up/i.test(m);
+}
+export function girisHatasiSec(bulutHata: string, yerelHata: string): string {
+  if (agHatasiMi(bulutHata)) {
+    return yerelHata.includes("kayıtlı değil")
+      ? "Bağlantı kurulamadı; şifreni doğrulamak için internete bağlan."
+      : yerelHata;
+  }
+  if (bulutHata.includes("Bu e-posta kayıtlı değil")) return yerelHata;
+  return bulutHata;
+}

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Eye, EyeOff, KeyRound, LogIn, UserPlus, Wallet } from "lucide-react";
 import { SORULAR, cikis, epostaGecerli, giris, hatirlanan, kayitOl, parolaHatirla, sifirla, sifirlamaSorusu, unut } from "../lib/auth";
-import { cloudGiris, cloudKayit, cloudMe, cloudSifirla, cloudSoruyuGetir, cloudCikis } from "../lib/api";
+import { cloudGiris, cloudKayit, cloudMe, cloudSifirla, cloudSoruyuGetir, cloudCikis, girisHatasiSec } from "../lib/api";
 import { gitSayfasi } from "../lib/navigasyon";
 
 /** Parola gücü puanı (0-4): uzunluk + çeşitlilik kalemleri üzerinden. */
@@ -89,12 +89,16 @@ export default function AuthScreen({ baslangic = "giris" }: { baslangic?: "giris
 
   const girisGonder = () => {
     void calistir(async () => {
-      // Bulut (Neon) öncelikli; ağ/env hatasında yerel mod devreye girer
-      let h = await cloudGiris(ep, parola);
-      if (!h) { setSinyal("cloud"); }
+      // Bulut (Neon) öncelikli; ağ/env hatasında yerel mod devreye girer.
+      // Hata önceliği: bulut cevabı (parola hatalı / hız sınırı) yerel
+      // "kayıtlı değil" mesajı ile ezilmesin (bkz. girisHatasiSec).
+      const bulutHata = await cloudGiris(ep, parola);
+      let h: string | null;
+      if (!bulutHata) { h = null; setSinyal("cloud"); }
       else {
-        h = await giris(ep, parola);
-        if (!h) setSinyal("yerel");
+        const yerelHata = await giris(ep, parola);
+        if (!yerelHata) { h = null; setSinyal("yerel"); }
+        else h = girisHatasiSec(bulutHata, yerelHata);
       }
       if (!h && beniHatirla && parolaKaydet) parolaHatirla(ep, parola);
       return h;
@@ -104,9 +108,11 @@ export default function AuthScreen({ baslangic = "giris" }: { baslangic?: "giris
   const kayitGonder = () => {
     void calistir(async () => {
       const h = await cloudKayit(ad, eposta, parola, soru, cevap);
-      if (h) return (await kayitOl(ad, eposta, parola, soru, cevap));
-      setSinyal("cloud");
-      return null;
+      if (!h) { setSinyal("cloud"); return null; }
+      // Bulut "zaten kayıtlı" dediyse yerel gölge hesap açma; yalnız ağ/env
+      // hatasında yerel mod devreye girer (bkz. girisHatasiSec).
+      if (h.includes("zaten kayıtlı")) return h;
+      return await kayitOl(ad, eposta, parola, soru, cevap);
     }, ep);
   };
 
