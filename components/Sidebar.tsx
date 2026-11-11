@@ -138,7 +138,7 @@ export default function Sidebar({
 
   const sidebarIcerik = (dar: boolean) => (
     <>
-      {/* logo + daralt/genişlet */}
+      {/* logo */}
       <div className={`flex items-center gap-2.5 ${dar ? "justify-center px-2 py-4" : "px-4 py-4"}`}>
         <img src="ikonlar/ikon-192.png" alt="" width={34} height={34} className="shrink-0 rounded-[22%] ring-1 ring-white/20" />
         {!dar && (
@@ -148,6 +148,13 @@ export default function Sidebar({
           </span>
         )}
       </div>
+
+      {/* Oturum / kullanıcı paneli — logo altında, üstte */}
+      {panel && (
+        <div className={`border-b border-white/10 px-2 pb-3 ${dar ? "flex justify-center" : ""}`}>
+          {panel}
+        </div>
+      )}
 
       {/* arama */}
       {onAra && (
@@ -245,9 +252,8 @@ export default function Sidebar({
         {dugme("yardim", "Yardım", dar)}
       </nav>
 
-      {/* alt: kullanıcı paneli + daralt/genişlet */}
+      {/* alt: daralt/genişlet */}
       <div className="border-t border-white/10 px-2 py-3">
-        {panel && <div className={dar ? "mb-2 flex justify-center" : "mb-2"}>{panel}</div>}
         <button
           type="button"
           onClick={() => setGenis(!genis)}
