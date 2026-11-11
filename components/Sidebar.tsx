@@ -22,6 +22,7 @@ import {
   PanelLeftOpen
 } from "lucide-react";
 import type { Ledger } from "../lib/store";
+import { pwaKurulumKullan } from "./PwaKayit";
 
 export type View =
   | "panel"
@@ -74,6 +75,23 @@ const sinif = (aktif: boolean) =>
   `flex w-full items-center gap-3 rounded-[10px] px-3 py-2 text-sm transition ${
     aktif ? "bg-white font-semibold text-slate-900" : "text-slate-300 hover:bg-white/10 hover:text-white"
   }`;
+
+/** PWA kurulum düğmesi — yalnızca yüklenebilir olduğunda görünür. */
+function KurBtn({ dar }: { dar: boolean }) {
+  const { tur, kur } = pwaKurulumKullan();
+  if (tur !== "onayli") return null;
+  return (
+    <button
+      type="button"
+      onClick={() => void kur()}
+      title="Uygulamayı bu cihaza kur (PWA)"
+      className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-200 transition hover:bg-emerald-500/20"
+    >
+      <span>📲</span>
+      {!dar && <span>Uygulamayı kur</span>}
+    </button>
+  );
+}
 
 export default function Sidebar({
   view,
@@ -252,8 +270,11 @@ export default function Sidebar({
         {dugme("yardim", "Yardım", dar)}
       </nav>
 
-      {/* alt: daralt/genişlet */}
+      {/* alt: PWA kur + daralt/genişlet */}
       <div className="border-t border-white/10 px-2 py-3">
+        <div className="mb-2">
+          <KurBtn dar={!genis} />
+        </div>
         <button
           type="button"
           onClick={() => setGenis(!genis)}
