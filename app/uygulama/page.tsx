@@ -319,6 +319,7 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
   const NS = veriAnahtari(eposta);
   const { db, setDb, replaceAll, kurtarma, senkron } = useDb(NS);
   // F5/Yenile'de kaldığın sekmede kal (oturum boyunca hatırda tutulur)
+  const [sidebarGenis, setSidebarGenis] = useState(true);
   const [view, setView] = useState<View>(() => {
     if (typeof window === "undefined") return "panel";
     let v: string | null = null;
@@ -518,6 +519,8 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
         aktif={db.aktif}
         setAktif={setAktif}
         onAra={() => setAraAcik(true)}
+        genis={sidebarGenis}
+        setGenis={setSidebarGenis}
         panel={
           <KullaniciPaneli
             db={db}
@@ -554,7 +557,7 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
           📒 {db.ledgers.find((d) => d.id === db.aktif)?.name || ""}
         </span>
       </div>
-      <main className="mx-auto w-full max-w-[1200px] p-4 pb-24 pt-14 sm:p-6 sm:pt-14 md:pt-6">
+      <main className={`mx-auto w-full max-w-[1200px] p-4 pb-24 pt-14 sm:p-6 sm:pt-14 md:pt-4 md:transition-all md:duration-300 ${sidebarGenis ? "md:ml-60" : "md:ml-16"}`}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h1 className="text-2xl font-bold">{BASLIK[view][0]}</h1>

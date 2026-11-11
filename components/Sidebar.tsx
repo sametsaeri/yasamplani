@@ -17,7 +17,9 @@ import {
   Search,
   Sparkles,
   StickyNote,
-  Wallet
+  Wallet,
+  PanelLeftClose,
+  PanelLeftOpen
 } from "lucide-react";
 import type { Ledger } from "../lib/store";
 
@@ -36,7 +38,6 @@ export type View =
 
 type MenuOge = { id: View; ad: string; ikon: React.ReactNode; not?: string; kisa?: string };
 
-/** Düz liste: mobil alt menü ve grup içerikleri bundan beslenir. */
 const MENU: MenuOge[] = [
   { id: "panel", ad: "Genel Bakış", ikon: <LayoutDashboard size={17} />, not: "Günün ve ayın özeti" },
   { id: "zaman", ad: "Zaman Planlama", ikon: <CalendarDays size={17} />, not: "Günlük, haftalık, aylık takvim" },
@@ -53,10 +54,6 @@ const MENU: MenuOge[] = [
 
 type MenuGrup = { id: string; ad: string; ikon: React.ReactNode; ozet: string; ogeler: View[] };
 
-/**
- * ÜST BARIN TASNİFİ: 10 düz öğe yerine 2 başlıklı grup + 3 doğrudan düğme.
- * Menü satırı böylece hiçbir genişlikte taşmıyor (yatay kaydırma gerekmiyor).
- */
 const GRUPLAR: MenuGrup[] = [
   { id: "finans", ad: "Finans", ikon: <Coins size={17} />, ozet: "Para işleri", ogeler: ["finans", "butce", "rapor"] },
   {
@@ -74,22 +71,9 @@ const OGE: Record<View, MenuOge> = MENU.reduce((a, m) => {
 }, {} as Record<View, MenuOge>);
 
 const sinif = (aktif: boolean) =>
-  `flex shrink-0 items-center gap-2 rounded-[10px] px-3 py-2 text-sm transition ${
+  `flex w-full items-center gap-3 rounded-[10px] px-3 py-2 text-sm transition ${
     aktif ? "bg-white font-semibold text-slate-900" : "text-slate-300 hover:bg-white/10 hover:text-white"
   }`;
-
-/** Fare tekerleğini yatay kaydırmaya çevirir (menü satırı ve defter çipleri için). */
-function tekerlekYatay(n: HTMLElement | null) {
-  if (!n) return () => {};
-  const f = (e: WheelEvent) => {
-    if (n.scrollWidth <= n.clientWidth + 8) return;
-    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
-    n.scrollLeft += e.deltaY;
-    e.preventDefault();
-  };
-  n.addEventListener("wheel", f, { passive: false });
-  return () => n.removeEventListener("wheel", f);
-}
 
 export default function Sidebar({
   view,
@@ -98,7 +82,9 @@ export default function Sidebar({
   aktif,
   setAktif,
   onAra,
-  panel
+  panel,
+  genis,
+  setGenis
 }: {
   view: View;
   setView: (v: View) => void;
@@ -106,240 +92,253 @@ export default function Sidebar({
   aktif: string;
   setAktif: (id: string) => void;
   onAra?: () => void;
-  /** Sağ üstteki kullanıcı paneli (defter + oturum + ayarlar) */
   panel?: React.ReactNode;
+  /** Sidebar açık (geniş) / kapalı (dar) durumu — üst bileşen kontrol eder. */
+  genis: boolean;
+  setGenis: (v: boolean) => void;
 }) {
-  const headerRef = useRef<HTMLElement | null>(null);
-  const navRef = useRef<HTMLElement | null>(null);
-  const [tasiyor, setTasiyor] = useState(false);
-  const [acik, setAcik] = useState<string | null>(null);
-  const [konum, setKonum] = useState({ sol: 0, ust: 0 });
-  const [gizlileriGoster, setGizlileriGoster] = useState(false);
+  const [acikGrup, setAcikGrup] = useState<string | null>(null);
+  const [mobilAcik, setMobilAcik] = useState(false);
 
   const aktifDefter = ledgers.find((d) => d.id === aktif) ?? ledgers[0];
 
-  // fare tekerleği yana kaydırsın (shift gerektirmez)
-  useEffect(() => tekerlekYatay(navRef.current), []);
-
-  // menü satırı sığmıyorsa sağda kaydırılabileceğini gösteren belirtiyi aç
+  // görünüm değişince grup menüsü kapanır
   useEffect(() => {
-    const n = navRef.current;
-    if (!n) return;
-    const olc = () => setTasiyor(n.scrollWidth - n.clientWidth > 8);
-    olc();
-    window.addEventListener("resize", olc);
-    return () => window.removeEventListener("resize", olc);
-  }, []);
-
-  // aktif menü görünümden taşıyorsa görünür kılmak için kaydır
-  useEffect(() => {
-    const n = navRef.current;
-    if (!n) return;
-    const el = n.querySelector<HTMLElement>('[data-aktif="1"]');
-    el?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    setAcikGrup(null);
   }, [view]);
 
-  // açık grubu: dışarı tıkla / ESC / yeniden boyutla kapat
+  // dışarı tıkla → grup menüsü kapat
   useEffect(() => {
-    if (!acik) return;
+    if (!acikGrup) return;
     const disari = (e: PointerEvent) => {
-      if (headerRef.current && !headerRef.current.contains(e.target as Node)) setAcik(null);
+      const hedef = e.target as Node;
+      const sidebar = document.querySelector("[data-sidebar]");
+      if (sidebar && !sidebar.contains(hedef)) setAcikGrup(null);
     };
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setAcik(null);
-    };
-    const yeniden = () => setAcik(null);
     document.addEventListener("pointerdown", disari);
-    document.addEventListener("keydown", esc);
-    window.addEventListener("resize", yeniden);
-    return () => {
-      document.removeEventListener("pointerdown", disari);
-      document.removeEventListener("keydown", esc);
-      window.removeEventListener("resize", yeniden);
-    };
-  }, [acik]);
+    return () => document.removeEventListener("pointerdown", disari);
+  }, [acikGrup]);
 
-  // görünüm değişince menü kapanır
-  useEffect(() => {
-    setAcik(null);
-  }, [view]);
+  const grupOgeleri = (g: MenuGrup) => g.ogeler.map((id) => OGE[id]);
 
-  // menüyü düğmenin hemen altına sabitle (kaydırma kutusuna kırpılmaması için fixed)
-  const konumAc = (e: React.MouseEvent<HTMLButtonElement>, id: string, genislik: number) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    setKonum({
-      sol: Math.max(8, Math.min(r.left, window.innerWidth - genislik - 12)),
-      ust: r.bottom + 6
-    });
-    setAcik(id);
-  };
+  const grupIcerde = (g: MenuGrup) => g.ogeler.includes(view);
 
-  const dugme = (id: View, etiket?: string) => (
+  const dugme = (id: View, etiket?: string, dar?: boolean) => (
     <button
       key={id}
-      data-aktif={view === id ? "1" : undefined}
       onClick={() => setView(id)}
       className={sinif(view === id)}
       aria-current={view === id ? "page" : undefined}
+      title={dar ? OGE[id].ad : undefined}
     >
       {OGE[id].ikon}
-      <span className="whitespace-nowrap">{etiket ?? OGE[id].ad}</span>
+      {!dar && <span className="truncate">{etiket ?? OGE[id].ad}</span>}
     </button>
   );
 
-  const grup = acik ? GRUPLAR.find((g) => g.id === acik) : null;
+  const sidebarIcerik = (dar: boolean) => (
+    <>
+      {/* logo + daralt/genişlet */}
+      <div className={`flex items-center gap-2.5 ${dar ? "justify-center px-2 py-4" : "px-4 py-4"}`}>
+        <img src="ikonlar/ikon-192.png" alt="" width={34} height={34} className="shrink-0 rounded-[22%] ring-1 ring-white/20" />
+        {!dar && (
+          <span className="min-w-0">
+            <b className="block truncate text-[14px] leading-tight text-white">Hesap Planım</b>
+            <small className="truncate text-[10.5px] text-slate-400">Muhasebe &amp; Bütçe</small>
+          </span>
+        )}
+      </div>
+
+      {/* arama */}
+      {onAra && (
+        <div className={dar ? "px-2 pb-2" : "px-3 pb-2"}>
+          <button
+            onClick={onAra}
+            title="Ara ve komut paleti (Ctrl+K)"
+            className={`flex w-full items-center gap-2 rounded-xl border border-white/15 bg-white/5 text-[12.5px] text-slate-400 transition hover:border-white/30 hover:bg-white/10 hover:text-white ${dar ? "justify-center px-2 py-2" : "px-3 py-1.5"}`}
+          >
+            <Search size={14} />
+            {!dar && (
+              <>
+                <span className="flex-1 text-left">Ara veya komut</span>
+                <kbd className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium tracking-wide">Ctrl K</kbd>
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* ana menü */}
+      <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-2">
+        {dugme("panel", undefined, dar)}
+
+        {GRUPLAR.map((g) => {
+          const icerde = grupIcerde(g);
+          const acik = acikGrup === g.id;
+          return (
+            <div key={g.id} className="relative">
+              <button
+                onClick={() => (acik ? setAcikGrup(null) : setAcikGrup(g.id))}
+                className={sinif(icerde)}
+                title={dar ? g.ad : undefined}
+              >
+                {g.ikon}
+                {!dar && (
+                  <>
+                    <span className="truncate">{g.ad}</span>
+                    <ChevronDown size={14} className={`ml-auto transition-transform duration-200 ${acik ? "rotate-180" : ""}`} />
+                  </>
+                )}
+              </button>
+              {/* geniş mod: iç içe alt öğeler */}
+              {!dar && acik && (
+                <div className="ml-3 mt-1 space-y-0.5 border-l border-white/10 pl-2">
+                  {grupOgeleri(g).map((o) => (
+                    <button
+                      key={o.id}
+                      onClick={() => setView(o.id)}
+                      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12.5px] transition ${
+                        view === o.id ? "bg-white/15 text-white" : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
+                      }`}
+                    >
+                      <span className="shrink-0">{o.ikon}</span>
+                      <span className="truncate">{o.ad}</span>
+                      {view === o.id && <span className="ml-auto text-[10px]">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* dar mod: flyout */}
+              {dar && acik && (
+                <div
+                  role="menu"
+                  className="fixed z-50 w-56 rounded-xl border border-white/10 bg-slate-800 p-1.5 shadow-[0_18px_40px_-12px_rgba(0,0,0,0.7)]"
+                  style={{ left: 72, top: 0 }}
+                >
+                  <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    {g.ozet}
+                  </div>
+                  {grupOgeleri(g).map((o) => (
+                    <button
+                      key={o.id}
+                      role="menuitem"
+                      onClick={() => {
+                        setView(o.id);
+                        setAcikGrup(null);
+                      }}
+                      className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition ${
+                        view === o.id ? "bg-white text-slate-900" : "text-slate-200 hover:bg-white/10"
+                      }`}
+                    >
+                      <span className="shrink-0">{o.ikon}</span>
+                      <span className="truncate text-[13px]">{o.ad}</span>
+                      {view === o.id && <span className="ml-auto text-[11px] font-bold">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {dugme("asistan", "Asistan", dar)}
+        {dugme("yardim", "Yardım", dar)}
+      </nav>
+
+      {/* alt: kullanıcı paneli + daralt/genişlet */}
+      <div className="border-t border-white/10 px-2 py-3">
+        {panel && <div className={dar ? "mb-2 flex justify-center" : "mb-2"}>{panel}</div>}
+        <button
+          type="button"
+          onClick={() => setGenis(!genis)}
+          aria-label={genis ? "Sidebar'ı daralt" : "Sidebar'ı genişlet"}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-300 transition hover:bg-white/10 hover:text-white"
+        >
+          {genis ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}
+          {genis && <span>Daralt</span>}
+        </button>
+      </div>
+    </>
+  );
 
   return (
     <>
-      {/* ÜST BAR — satır 1: logo + defter seçici, satır 2: tasnifli ana menü */}
-      <header
-        ref={headerRef}
-        className="no-print sticky top-0 z-40 hidden w-full border-b border-white/10 bg-slate-900 text-slate-200 shadow-[0_6px_18px_-8px_rgba(15,23,42,0.6)] md:block"
+      {/* Masaüstü sol sidebar (açılır/kapanır) */}
+      <aside
+        data-sidebar
+        className={`no-print fixed left-0 top-0 z-40 hidden h-screen flex-col border-r border-white/10 bg-slate-900 text-slate-200 shadow-[4px_0_18px_-8px_rgba(15,23,42,0.6)] transition-all duration-300 md:flex ${genis ? "w-60" : "w-16"}`}
       >
-        {/* satır 1: logo + defter seçici + yerel rozeti */}
-        <div className="flex items-center gap-3 px-4 pt-2.5">
-          <div className="flex shrink-0 items-center gap-2.5">
-            <img
-              src="ikonlar/ikon-192.png"
-              alt=""
-              width={36}
-              height={36}
-              className="rounded-[22%] shadow-md shadow-black/40 ring-1 ring-white/15"
-            />
-            <span>
-              <b className="block text-[15px] leading-tight text-white">Hesap Planım</b>
-              <small className="text-[11px] text-slate-400">Muhasebe &amp; Bütçe</small>
-            </span>
-          </div>
+        {sidebarIcerik(!genis)}
+      </aside>
 
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            {onAra && (
-              <button
-                onClick={onAra}
-                title="Ara ve komut paleti (Ctrl+K)"
-                className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[12.5px] text-slate-400 transition hover:border-white/30 hover:bg-white/10 hover:text-white"
-              >
-                <Search size={14} />
-                <span>Ara veya komut</span>
-                <kbd className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium tracking-wide">Ctrl K</kbd>
-              </button>
-            )}
-            {panel}
-          </div>
-
-          <span className="hidden shrink-0 rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-slate-400 lg:inline-block">
-            ☁ PC · Web senkron · Veriler bu PC&apos;de
+      {/* Mobil üst bar + alt gezinme */}
+      <div className="md:hidden">
+        <div className="fixed inset-x-0 top-0 z-30 flex items-center gap-2 border-b border-white/10 bg-slate-900 px-3 py-2 text-white">
+          <button
+            type="button"
+            onClick={() => setMobilAcik(true)}
+            aria-label="Menüyü aç"
+            className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/5 text-white"
+          >
+            ☰
+          </button>
+          <img src="ikonlar/ikon-192.png" alt="" width={26} height={26} className="rounded-[22%] ring-1 ring-white/15" />
+          <b className="text-sm">Hesap Planım</b>
+          <span className="ml-auto max-w-[40%] truncate rounded-full bg-white/10 px-2 py-0.5 text-[11px]">
+            📒 {aktifDefter?.name || ""}
           </span>
         </div>
-
-        {/* satır 2: tasnifli ana menü — 3 başlık, taşma olmayınca kaydırma belirtisi de kapalı */}
-        <div className="relative">
-          <nav
-            ref={navRef}
-            aria-label="Ana menü"
-            className="no-scrollbar flex items-center gap-1 overflow-x-auto px-3 pb-2 pt-1.5"
-          >
-            {dugme("panel")}
-            {GRUPLAR.map((g) => {
-              const icerde = g.ogeler.includes(view);
-              const durum = acik === g.id;
-              return (
-                <div key={g.id} className="relative shrink-0">
-                  <button
-                    aria-haspopup="menu"
-                    aria-expanded={durum}
-                    data-aktif={icerde ? "1" : undefined}
-                    onClick={(e) => (durum ? setAcik(null) : konumAc(e, g.id, 272))}
-                    className={sinif(icerde)}
-                  >
-                    {g.ikon}
-                    <span className="whitespace-nowrap">{g.ad}</span>
-                    <ChevronDown
-                      size={14}
-                      className={`transition-transform duration-200 ${durum ? "rotate-180" : ""}`}
-                    />
-                  </button>
-                </div>
-              );
-            })}
-            {dugme("asistan", "Asistan")}
-            {dugme("yardim")}
-          </nav>
-          {tasiyor && (
-            <span
-              aria-hidden
-              className="pointer-events-none absolute inset-y-1 right-0 flex w-12 items-center justify-end bg-gradient-to-l from-slate-900 via-slate-900/85 to-transparent pr-1 text-slate-400"
+        <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-white/10 bg-slate-900/95 backdrop-blur">
+          {MENU.map((m) => (
+            <button
+              key={m.id}
+              onClick={() => setView(m.id)}
+              className={`flex min-w-[58px] flex-1 flex-col items-center gap-0.5 px-1 py-2 text-[10px] transition ${
+                view === m.id ? "bg-white text-slate-900" : "text-slate-300"
+              }`}
+              aria-label={m.ad}
             >
-              <ChevronDown size={16} className="-rotate-90" />
-            </span>
-          )}
-        </div>
+              <span className="flex h-5 items-center">{m.ikon}</span>
+              <span className="max-w-[58px] truncate">{m.kisa ?? m.ad.split(" ")[0]}</span>
+            </button>
+          ))}
+        </nav>
+      </div>
 
-        {/* açılır grup paneli — fixed: menü satırının kaydırma kutusuna kırpılmaz */}
-        {grup && (
-          <div
-            role="menu"
-            aria-label={grup.ad}
-            style={{ position: "fixed", left: konum.sol, top: konum.ust, width: 272 }}
-            className="z-50 rounded-xl border border-white/10 bg-slate-800 p-1.5 shadow-[0_18px_40px_-12px_rgba(0,0,0,0.7)]"
-          >
-            <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-              {grup.ozet}
+      {/* Mobil drawer */}
+      {mobilAcik && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMobilAcik(false)} />
+          <aside className="absolute left-0 top-0 h-full w-72 overflow-y-auto border-r border-white/10 bg-slate-900 p-4 text-slate-200">
+            <div className="mb-4 flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <img src="ikonlar/ikon-192.png" alt="" width={30} height={30} className="rounded-[22%] ring-1 ring-white/15" />
+                <b className="text-white">Hesap Planım</b>
+              </span>
+              <button onClick={() => setMobilAcik(false)} aria-label="Kapat" className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 text-white hover:bg-white/10">
+                ✕
+              </button>
             </div>
-            {grup.ogeler.map((id) => {
-              const o = OGE[id];
-              const secili = view === id;
-              return (
+            <div className="space-y-1">
+              {MENU.map((m) => (
                 <button
-                  key={id}
-                  role="menuitem"
+                  key={m.id}
                   onClick={() => {
-                    setView(id);
-                    setAcik(null);
+                    setView(m.id);
+                    setMobilAcik(false);
                   }}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition ${
-                    secili ? "bg-white text-slate-900" : "text-slate-200 hover:bg-white/10"
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
+                    view === m.id ? "bg-white font-semibold text-slate-900" : "text-slate-300 hover:bg-white/10 hover:text-white"
                   }`}
                 >
-                  <span
-                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
-                      secili ? "bg-slate-900 text-white" : "bg-white/10 text-slate-300"
-                    }`}
-                  >
-                    {o.ikon}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <b className="block truncate text-[13px] font-semibold">{o.ad}</b>
-                    <small className={`block truncate text-[11px] ${secili ? "text-slate-500" : "text-slate-400"}`}>
-                      {o.not}
-                    </small>
-                  </span>
-                  {secili && <span className="shrink-0 text-[11px] font-bold">✓</span>}
+                  {m.ikon}
+                  <span>{m.ad}</span>
                 </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Defter seçimi artık sağ üstteki Oturum & Ayarlar menüsünde */}
-      </header>
-
-      {/* B3: mobil alt gezinme — dar ekranda tek elle kullanım */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-white/10 bg-slate-900/95 backdrop-blur md:hidden">
-        {MENU.map((m) => (
-          <button
-            key={m.id}
-            onClick={() => setView(m.id)}
-            className={`flex min-w-[58px] flex-1 flex-col items-center gap-0.5 px-1 py-2 text-[10px] transition ${
-              view === m.id ? "bg-white text-slate-900" : "text-slate-300"
-            }`}
-            aria-label={m.ad}
-          >
-            <span className="flex h-5 items-center">{m.ikon}</span>
-            <span className="max-w-[58px] truncate">{m.kisa ?? m.ad.split(" ")[0]}</span>
-          </button>
-        ))}
-      </nav>
+              ))}
+            </div>
+          </aside>
+        </div>
+      )}
     </>
   );
 }
