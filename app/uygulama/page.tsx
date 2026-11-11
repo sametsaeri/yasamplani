@@ -7,6 +7,7 @@ import Finans, { ButceView } from "../../components/Finans";
 import { GorevView, GunlukView, KiloView, NotView, ZamanView } from "../../components/Yasam";
 import { AsistanView, RaporView } from "../../components/Rapor";
 import { YardimView } from "../../components/Yardim";
+import { OnboardingTur } from "../../components/OnboardingTur";
 import { gitSayfasi } from "../../lib/navigasyon";
 import type { Db } from "../../lib/store";
 import { useDb } from "../../lib/store";
@@ -320,6 +321,10 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
   const { db, setDb, replaceAll, kurtarma, senkron } = useDb(NS);
   // F5/Yenile'de kaldığın sekmede kal (oturum boyunca hatırda tutulur)
   const [sidebarGenis, setSidebarGenis] = useState(true);
+  const [onboardingAcik, setOnboardingAcik] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try { return localStorage.getItem("hp-onboarding-done") !== "1"; } catch { return false; }
+  });
   const [view, setView] = useState<View>(() => {
     if (typeof window === "undefined") return "panel";
     let v: string | null = null;
@@ -626,6 +631,16 @@ function Uygulama({ eposta, onCikis }: { eposta: string; onCikis: () => void }) 
             Şifremi unuttum → çıkış yapıp sıfırla
           </button>
         </div>
+      )}
+
+      {/* İlk giriş onboarding turu (bir kez) */}
+      {onboardingAcik && !kilitli && (
+        <OnboardingTur
+          onBitti={() => {
+            setOnboardingAcik(false);
+            try { localStorage.setItem("hp-onboarding-done", "1"); } catch { /* yoksay */ }
+          }}
+        />
       )}
     </div>
   );
